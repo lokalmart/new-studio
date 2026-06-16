@@ -355,8 +355,13 @@ async function handleSchemaSnapshot(conn, body) {
     errors
   };
 
+  // Schema snapshot may be partially successful. A missing/inaccessible optional model
+  // should not block export/download because the usable schema rows are still valuable
+  // for ChatGPT and preflight. Fatal failures are still caught by the outer POST handler.
   return {
-    ok: errors.length === 0,
+    ok: true,
+    partial_ok: errors.length > 0,
+    error_count: errors.length,
     exported_at: compact.exported_at,
     sheets: {
       '__manifest': [{ exported_at: compact.exported_at, db: conn.db, source: conn.source, models: modelRows.length, errors: errors.length }],
@@ -856,7 +861,7 @@ async function handleRecordScan(conn, body) {
 async function GET() {
   return json({
     ok: true,
-    app: 'Lokalmart New Studio v11 Schema Snapshot + Preflight Gate',
+    app: 'Lokalmart New Studio v11.2 Schema Snapshot + Preflight Gate',
     connection: connStatus(),
     actions: ['test', 'schema', 'schema_snapshot', 'preflight_import', 'import_batch', 'record_scan', 'name_search'],
     rule: 'Import should run only after schema snapshot and preflight ok.'

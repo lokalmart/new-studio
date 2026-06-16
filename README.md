@@ -1,4 +1,4 @@
-# Lokalmart New Studio v11 — Schema Snapshot + Preflight Gate
+# Lokalmart New Studio v11.2 — Schema Snapshot + Preflight Gate
 
 Tujuan versi ini: menghentikan pola import XLSX dalam gelap.
 
@@ -10,6 +10,11 @@ Tujuan versi ini: menghentikan pola import XLSX dalam gelap.
 4. Upload XLSX hasil ChatGPT.
 5. Klik **Preflight Semua**.
 6. Import hanya jika preflight error = 0.
+
+## Catatan v11.2
+
+- Schema snapshot sekarang mendukung **partial success**. Jika 1 model opsional gagal dibaca, export tetap berhasil dan detailnya masuk ke sheet `schema.errors`.
+- Ini mencegah kasus: 19/20 model berhasil tetapi UI menampilkan `Schema snapshot gagal`.
 
 ## Fitur utama
 

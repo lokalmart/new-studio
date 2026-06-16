@@ -1,7 +1,7 @@
 (() => {
   const $ = (q) => document.querySelector(q);
   const $$ = (q) => Array.from(document.querySelectorAll(q));
-  const STORE = 'lokalmart_new_studio_v11';
+  const STORE = 'lokalmart_new_studio_v11_2';
   const META = new Set(['_model', '__action', '_external_id', 'external_id', 'id', 'x_studio2_odoo_id', '__rownum__']);
 
   const MODEL_PRESETS = [
@@ -63,7 +63,11 @@
     const text = await res.text();
     let json;
     try { json = JSON.parse(text); } catch { throw new Error(`Server non-JSON ${res.status}: ${text.slice(0, 300)}`); }
-    if (!json.ok && !json.blocked_by_preflight) throw new Error(json.error || JSON.stringify(json).slice(0, 400));
+    // Some actions, especially schema_snapshot, can return partial_ok=true: usable data exists
+    // even when one optional model cannot be inspected. Treat that as a warning, not fatal.
+    if (!json.ok && !json.blocked_by_preflight && !json.partial_ok) {
+      throw new Error(json.error || JSON.stringify(json).slice(0, 400));
+    }
     return json;
   }
 
@@ -192,7 +196,8 @@
       } else {
         await downloadSheetsAsXlsx(j.sheets, `lokalmart_odoo_real_schema_${Date.now()}.xlsx`);
       }
-      log(j.ok ? 'ok' : 'warn', `Schema snapshot selesai. Models: ${(j.context?.models || []).length}, error: ${(j.context?.errors || []).length}.`);
+      const errCount = Number(j.error_count || (j.context?.errors || []).length || 0);
+      log(errCount ? 'warn' : 'ok', `Schema snapshot selesai. Models: ${(j.context?.models || []).length}, warning/error model: ${errCount}. File tetap bisa dipakai; cek sheet schema.errors.`);
     } catch (e) { log('error', `Schema snapshot gagal: ${e.message}`); }
     finally { setBusy(false); }
   }
@@ -287,7 +292,7 @@
     const c = issueCounts(pf?.issues || []);
     $('#app').innerHTML = `
       <header class="topbar">
-        <div class="brand"><span class="logo">L</span><div><strong>Lokalmart New Studio v11</strong><small>Schema Real → Preflight → Import Aman</small></div></div>
+        <div class="brand"><span class="logo">L</span><div><strong>Lokalmart New Studio v11.2</strong><small>Schema Real → Preflight → Import Aman</small></div></div>
         <div class="status ${state.busy ? 'busy' : ''}">${state.busy ? 'Working…' : 'Idle'}</div>
       </header>
       <nav class="nav">
