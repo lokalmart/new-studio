@@ -3,5 +3,8 @@
     "src/app/api/odoo/route.ts": {
       "maxDuration": 300
     }
-  }
+  },
+  "installCommand": "corepack enable && pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm run build",
+  "framework": "nextjs"
 }

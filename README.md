@@ -1,50 +1,99 @@
-# Studio3 v10.4 — Multi-model Bulk Export & Import All Sheets
+# Studio2 v10.2 — Smart Bundle Export
 
-Studio3 v10.4 memperbaiki kelemahan utama v10.2: export tidak lagi terkunci pada satu model saja. Admin sekarang bisa mencentang banyak model, scan record dari berbagai model, memilih record lintas model, lalu export menjadi XLSX multi-sheet.
+Studio2 v10.2 adalah versi Vercel-only yang tetap fokus pada **Import / Export / Review data Odoo**, tetapi sekarang Export sudah punya **Smart Bundle**.
 
-## Yang baru
+Smart Bundle bukan fitur AI context. Fitur ini murni untuk membawa record Odoo beserta data yang memang berkaitan secara operasional.
 
-### 1. Multi-model Single Export
+## Apa yang baru di v10.2
 
-Di mode **Single Model**, card model seperti Contacts, Products, Projects, Tasks, Knowledge, Sales, Categories, dan Web Categories sekarang benar-benar berfungsi sebagai checklist.
+### 1. Smart Bundle Export
 
-Flow baru:
+Export tidak lagi hanya “satu model satu sheet”. Admin bisa memilih objek utama, lalu Studio2 mengekspor sheet relasi yang relevan.
 
-1. Buka Export.
-2. Pilih **Single Model**.
-3. Centang beberapa model.
-4. Klik **Scan model dicentang** atau **Muat semua dicentang**.
-5. Pilih record lintas model.
-6. Klik Export record.
-7. Hasil masuk ke Review Workspace sebagai banyak sheet, misalnya:
-   - `res.partner`
-   - `product.template`
-   - `project.project`
-   - `project.task`
+Preset bundle:
 
-### 2. Bulk select record
+- **Project Bundle**
+  - `project.project`
+  - `project.task`
+  - `project.milestone`
+  - `project.update`
+  - `project.task.type`
+  - `res.partner`
+  - `res.users`
+  - `task_hierarchy`
+  - `relationship_map`
+  - `README_EXPORT`
 
-Record picker sekarang punya tombol cepat:
+- **Contact Bundle**
+  - `res.partner`
+  - child contacts / address
+  - `res.partner.category`
+  - optional: `sale.order`
+  - optional: `project.task`
 
-- **Pilih yang tampil**
-- **Pilih semua dimuat**
-- **Bersihkan tampil**
-- **Bersihkan semua**
-- Tombol per model, misalnya `Contacts 80/80`, `Products 30/80`
+- **Product Bundle**
+  - `product.template`
+  - `product.product`
+  - `product.supplierinfo`
+  - `product.category`
+  - `product.public.category`
+  - `uom.uom`
 
-Ini menghilangkan kebutuhan mencentang satu per satu.
+- **Sales Bundle**
+  - `sale.order`
+  - `sale.order.line`
+  - related `res.partner`
+  - related `product.product` / `product.template`
+  - related `res.users`
 
-### 3. Muat semua model dicentang
+- **Knowledge Bundle**
+  - `knowledge.article`
+  - child articles
+  - parent article reference
 
-Tombol **Muat semua dicentang** akan mengambil semua halaman record dari model yang dipilih secara bertahap. Untuk menjaga Vercel tetap aman, tiap model dibatasi maksimal 2000 record sekali jalan.
+### 2. Single Model tetap ada
 
-### 4. Import semua sheet
+Untuk pekerjaan cepat, admin tetap bisa export model biasa:
 
-Review Workspace sekarang punya tombol **Import semua sheet**. Ini cocok untuk XLSX multi-sheet hasil export bundle atau hasil validasi dari aplikasi lain.
+- `res.partner`
+- `product.template`
+- `project.project`
+- `project.task`
+- `knowledge.article`
+- `sale.order`
+- model custom
 
-### 5. Smart Bundle tetap ada
+### 3. Review Workspace tetap menjadi quality gate
 
-Smart Bundle tetap tersedia untuk Project Bundle, Contact Bundle, Product Bundle, Sales Bundle, dan Knowledge Bundle. Smart Bundle tetap bekerja berdasarkan record utama, sementara Multi-model export dipakai untuk export lintas model bebas.
+Hasil export bundle langsung masuk ke Review Workspace sebagai banyak sheet. Admin bisa:
+
+- memilih sheet,
+- cek schema,
+- edit object card,
+- buka grid,
+- download XLSX,
+- import sheet aktif.
+
+## Flow utama
+
+### Export Smart Bundle
+
+1. Buka **Export**.
+2. Pilih **Smart Bundle**.
+3. Pilih Project Bundle / Contact Bundle / Product Bundle / Sales Bundle / Knowledge Bundle.
+4. Klik **Scan record utama**.
+5. Pilih record utama.
+6. Klik **Export Bundle**.
+7. Hasil multi-sheet masuk ke Review Workspace.
+
+### Import validasi XLSX barcode scanner
+
+1. Buka **Import**.
+2. Upload XLSX dari web app barcode scanner.
+3. Studio2 mendeteksi sheet `product.template` / product.
+4. Admin cek foto, barcode, harga, vendor, kategori, dan field wajib.
+5. Admin edit yang kosong.
+6. Import batch kecil ke Odoo.
 
 ## Deploy ke Vercel
 
@@ -66,8 +115,23 @@ Di Vercel:
 - Build Command: default
 - Output Directory: default
 
-## Catatan aman
+## Koneksi Odoo
 
-- Untuk export besar, gunakan **Muat semua dicentang** bertahap dan jangan centang terlalu banyak model berat sekaligus.
-- Hindari field HTML panjang, chatter, dan image base64 kecuali memang perlu.
-- Foto produk dari barcode scanner lebih aman memakai URL/file reference dulu, bukan base64 besar.
+Buka Studio2 → Koneksi → isi:
+
+- Odoo URL
+- Database
+- Username/email
+- Password/API key
+
+Credential disimpan di browser `localStorage`, bukan di GitHub.
+
+## Catatan batasan Vercel
+
+Studio2 tetap memakai Vercel serverless, jadi Smart Bundle harus dipakai secara bertahap:
+
+- pilih record utama dulu,
+- jangan export full database,
+- hindari chatter dan image base64,
+- gunakan bundle yang relevan saja,
+- relasi opsional seperti sales/project pada Contact Bundle hanya dicentang jika perlu.

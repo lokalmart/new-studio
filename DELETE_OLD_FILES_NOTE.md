@@ -1,5 +1,3 @@
-# Catatan Replace File
+# Clean Slate Note
 
-Jika repo lama masih berisi file Next.js versi sebelumnya, aman menimpa seluruh isi repo dengan ZIP v10.4 ini.
-
-Pastikan tidak ada folder pembungkus tambahan. File `package.json` harus langsung berada di root repo.
+Untuk repo baru/clean slate, cukup upload seluruh isi ZIP v10.2 ke root repo. Jangan campur dengan file lama seperti `index.html`, `assistant.html`, atau `api/odoo.js` dari versi HTML lama.
