@@ -1,11 +1,12 @@
 {
-  "name": "studio3-v10-5-zero-install-static",
-  "version": "10.5.0",
+  "name": "lokalmart-new-studio-v10-7",
+  "version": "10.7.0",
   "private": true,
-  "description": "Lokalmart Studio3 v10.5 zero-install Vercel static app with Odoo API function",
+  "description": "Lokalmart New Studio static Vercel app with Odoo JSON-RPC API, multi-model export, smart bundle export, and XLSX import validation.",
+  "main": "server.js",
   "scripts": {
     "build": "node scripts/build.js",
-    "start": "node scripts/build.js"
+    "start": "node server.js"
   },
   "dependencies": {},
   "devDependencies": {},
