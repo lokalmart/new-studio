@@ -1,26 +1,26 @@
 {
-  "name": "studio2-vercel-v10-3-vite-build-fix",
-  "version": "10.3.0",
+  "name": "studio3-vercel-v10-4-multimodel-bulk-export",
+  "version": "10.4.0",
   "private": true,
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
-    "start": "vite preview --host 0.0.0.0"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.19",
+    "next": "^14.2.5",
     "postcss": "^8.4.39",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.5.3",
-    "vite": "^5.4.19"
+    "xlsx": "^0.18.5"
   },
-  "devDependencies": {
-    "@types/node": "^20.14.10",
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0"
-  },
-  "description": "Lokalmart Studio2 v10.3 Vercel-only Vite rebuild with Smart Bundle Export"
+  "devDependencies": {},
+  "description": "Lokalmart Studio3 v10.4 Vercel-only Multi-model Bulk Export"
 }

@@ -1,41 +1,73 @@
-# Studio2 v10.3 — Vercel Vite Build Fix
+# Studio3 v10.4 — Multi-model Bulk Export & Import All Sheets
 
-Versi ini mengganti shell Next.js menjadi Vite + React supaya build Vercel tidak menggantung di `Creating an optimized production build`.
+Studio3 v10.4 memperbaiki kelemahan utama v10.2: export tidak lagi terkunci pada satu model saja. Admin sekarang bisa mencentang banyak model, scan record dari berbagai model, memilih record lintas model, lalu export menjadi XLSX multi-sheet.
 
-Fitur tetap mengikuti v10.2:
+## Yang baru
 
-- Mobile-first Command Studio UI.
-- Import XLSX → review/editor → import batch kecil ke Odoo.
-- Export single model.
-- Smart Bundle Export: Project, Contact, Product, Sales, Knowledge.
-- API Odoo tetap di `/api/odoo` sebagai Vercel Serverless Function.
+### 1. Multi-model Single Export
 
-## Deploy di Vercel
+Di mode **Single Model**, card model seperti Contacts, Products, Projects, Tasks, Knowledge, Sales, Categories, dan Web Categories sekarang benar-benar berfungsi sebagai checklist.
 
-Gunakan setting berikut:
+Flow baru:
 
-- Framework Preset: **Vite**
-- Build Command: `npm run build`
-- Output Directory: `dist`
-- Install Command: `npm install`
-- Root Directory: root repo
+1. Buka Export.
+2. Pilih **Single Model**.
+3. Centang beberapa model.
+4. Klik **Scan model dicentang** atau **Muat semua dicentang**.
+5. Pilih record lintas model.
+6. Klik Export record.
+7. Hasil masuk ke Review Workspace sebagai banyak sheet, misalnya:
+   - `res.partner`
+   - `product.template`
+   - `project.project`
+   - `project.task`
 
-Pastikan struktur root repo:
+### 2. Bulk select record
+
+Record picker sekarang punya tombol cepat:
+
+- **Pilih yang tampil**
+- **Pilih semua dimuat**
+- **Bersihkan tampil**
+- **Bersihkan semua**
+- Tombol per model, misalnya `Contacts 80/80`, `Products 30/80`
+
+Ini menghilangkan kebutuhan mencentang satu per satu.
+
+### 3. Muat semua model dicentang
+
+Tombol **Muat semua dicentang** akan mengambil semua halaman record dari model yang dipilih secara bertahap. Untuk menjaga Vercel tetap aman, tiap model dibatasi maksimal 2000 record sekali jalan.
+
+### 4. Import semua sheet
+
+Review Workspace sekarang punya tombol **Import semua sheet**. Ini cocok untuk XLSX multi-sheet hasil export bundle atau hasil validasi dari aplikasi lain.
+
+### 5. Smart Bundle tetap ada
+
+Smart Bundle tetap tersedia untuk Project Bundle, Contact Bundle, Product Bundle, Sales Bundle, dan Knowledge Bundle. Smart Bundle tetap bekerja berdasarkan record utama, sementara Multi-model export dipakai untuk export lintas model bebas.
+
+## Deploy ke Vercel
+
+Pastikan struktur repo root seperti ini:
 
 ```text
-package.json
-index.html
-vite.config.mjs
-api/odoo.js
-src/
-public/
-vercel.json
+/package.json
+/next.config.mjs
+/vercel.json
+/src/app/page.tsx
+/src/app/api/odoo/route.ts
+/public/manifest.webmanifest
 ```
 
-## Kenapa v10.3 dibuat?
+Di Vercel:
 
-v10.2 memakai Next.js. Pada beberapa deploy, proses build berhenti lama di tahap optimized production build. v10.3 memindahkan UI menjadi Vite static SPA sehingga build jauh lebih ringan. XLSX library juga tidak dibundel saat build; SheetJS dimuat di browser saat admin upload/download XLSX.
+- Framework preset: Next.js
+- Root Directory: kosong/default root repo
+- Build Command: default
+- Output Directory: default
 
-## Catatan
+## Catatan aman
 
-Kalau UI tidak bisa membaca XLSX, pastikan browser punya akses internet ke CDN SheetJS.
+- Untuk export besar, gunakan **Muat semua dicentang** bertahap dan jangan centang terlalu banyak model berat sekaligus.
+- Hindari field HTML panjang, chatter, dan image base64 kecuali memang perlu.
+- Foto produk dari barcode scanner lebih aman memakai URL/file reference dulu, bukan base64 besar.
