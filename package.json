@@ -1,29 +1,14 @@
 {
-  "name": "studio3-vercel-v10-4-multimodel-bulk-export",
-  "version": "10.4.0",
+  "name": "studio3-v10-5-zero-install-static",
+  "version": "10.5.0",
   "private": true,
+  "description": "Lokalmart Studio3 v10.5 zero-install Vercel static app with Odoo API function",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "build": "node scripts/build.js",
+    "start": "node scripts/build.js"
   },
-  "dependencies": {
-    "@types/node": "^20.14.10",
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "autoprefixer": "^10.4.19",
-    "next": "^14.2.5",
-    "postcss": "^8.4.39",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "tailwindcss": "^3.4.4",
-    "typescript": "^5.5.3",
-    "xlsx": "^0.18.5"
-  },
+  "dependencies": {},
   "devDependencies": {},
-  "description": "Lokalmart Studio3 v10.4 Vercel-only Multi-model Bulk Export",
-  "packageManager": "pnpm@10.15.0",
   "engines": {
     "node": "20.x"
   }

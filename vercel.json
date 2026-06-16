@@ -1,10 +1,14 @@
 {
+  "installCommand": "echo \"Studio3 zero-install: skip npm install\"",
+  "buildCommand": "node scripts/build.js",
+  "outputDirectory": "dist",
   "functions": {
-    "src/app/api/odoo/route.ts": {
-      "maxDuration": 300
+    "api/odoo.js": {
+      "maxDuration": 60
     }
   },
-  "installCommand": "corepack enable && pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm run build",
-  "framework": "nextjs"
+  "rewrites": [
+    { "source": "/api/odoo", "destination": "/api/odoo.js" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
