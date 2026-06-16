@@ -1,112 +1,413 @@
 (() => {
-  const $ = (sel, root=document) => root.querySelector(sel);
-  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
-  const STORAGE = 'new_studio_v108_env_settings';
-  const SAFE_LIMIT = 32000;
+  const $ = (q) => document.querySelector(q);
+  const $$ = (q) => Array.from(document.querySelectorAll(q));
+  const STORE = 'lokalmart_new_studio_v11';
+  const META = new Set(['_model', '__action', '_external_id', 'external_id', 'id', 'x_studio2_odoo_id', '__rownum__']);
+
+  const MODEL_PRESETS = [
+    ['project.project', 'Project'], ['project.task', 'Task'], ['project.task.type', 'Stage'], ['project.milestone', 'Milestone'],
+    ['res.partner', 'Contact/UMKM'], ['product.template', 'Product'], ['product.category', 'Category'],
+    ['knowledge.article', 'Knowledge'], ['ir.model', 'Custom Model'], ['ir.model.fields', 'Custom Field'], ['ir.model.access', 'ACL'],
+    ['website.page', 'Website Page'], ['ir.ui.view', 'QWeb/View']
+  ];
+
   const state = {
-    mission: 'home', conn: { url:'', db:'', username:'', password:'' }, server:{checked:false,env_configured:false,source:'checking',env_missing:[]}, logs: [], busy:false,
-    sheets: [], activeSheet: 0, editorMode:'cards', schema:null,
-    exportMode:'single', selectedModels: { contacts:true }, customModel:'', customFields:'name,display_name,create_date,write_date', domain:'[]',
-    scans: {}, selected: {}, activeRecordModel:'all', search:'', bundleKey:'project', bundleScans:{}, bundleSelected:{}, bundleIncludes:{},
-    batchSize: 20
+    busy: false,
+    nav: 'import',
+    conn: { url: '', db: '', username: '', password: '' },
+    server: {},
+    sheets: [],
+    active: 0,
+    logs: [],
+    schemaSnapshot: null,
+    preflight: null,
+    importResults: null,
+    batchSize: 40,
+    customModels: ''
   };
-  const MODELS = [
-    {key:'contacts',label:'Contacts',model:'res.partner',kind:'contact',icon:'◎',risk:'safe',desc:'Customer, supplier, vendor, agen, member.',fields:'name,display_name,email,phone,mobile,street,street2,city,state_id,country_id,customer_rank,supplier_rank,is_company,category_id,comment'},
-    {key:'products',label:'Products',model:'product.template',kind:'product',icon:'◈',risk:'careful',desc:'Produk, harga, barcode, kategori, publish.',fields:'name,display_name,default_code,barcode,list_price,standard_price,categ_id,public_categ_ids,sale_ok,purchase_ok,website_published,description_sale,image_1920'},
-    {key:'projects',label:'Projects',model:'project.project',kind:'project',icon:'▦',risk:'safe',desc:'Ground Zero, Soraya Kitchen, Pilot, Ekspansi.',fields:'name,display_name,partner_id,user_id,active,date_start,date,description,privacy_visibility,stage_id'},
-    {key:'tasks',label:'Tasks',model:'project.task',kind:'project',icon:'☷',risk:'careful',desc:'Task, subtask, parent, stage, PIC, deadline.',fields:'name,display_name,project_id,parent_id,stage_id,user_ids,partner_id,date_deadline,priority,sequence,description'},
-    {key:'knowledge',label:'Knowledge',model:'knowledge.article',kind:'knowledge',icon:'✦',risk:'advanced',desc:'Artikel knowledge dan SOP.',fields:'name,display_name,parent_id,body,body_html,create_date,write_date'},
-    {key:'sales',label:'Sales',model:'sale.order',kind:'sales',icon:'₿',risk:'advanced',desc:'Sales order dan status invoice.',fields:'name,display_name,partner_id,date_order,state,invoice_status,amount_untaxed,amount_tax,amount_total,validity_date,note'},
-    {key:'categories',label:'Categories',model:'product.category',kind:'product',icon:'◇',risk:'safe',desc:'Kategori teknis produk.',fields:'name,display_name,parent_id,complete_name'},
-    {key:'web_categories',label:'Web Categories',model:'product.public.category',kind:'product',icon:'✧',risk:'safe',desc:'Kategori website/ecommerce.',fields:'name,display_name,parent_id,sequence,website_id'}
-  ];
-  const BUNDLES = [
-    {key:'project',label:'Project Bundle',model:'project.project',icon:'▦',desc:'Project beserta task, milestone, update, stage, partner, responsible user.',fields:'name,display_name,partner_id,user_id,date_start,date,description,privacy_visibility,stage_id,active'},
-    {key:'contact',label:'Contact Bundle',model:'res.partner',icon:'◎',desc:'Contact beserta child address, tag, dan relasi opsional.',fields:'name,display_name,email,phone,mobile,street,street2,city,state_id,country_id,customer_rank,supplier_rank,is_company,category_id,comment'},
-    {key:'product',label:'Product Bundle',model:'product.template',icon:'◈',desc:'Produk beserta variant, vendor, kategori, website category, satuan.',fields:'name,display_name,default_code,barcode,list_price,standard_price,categ_id,public_categ_ids,uom_id,uom_po_id,sale_ok,purchase_ok,website_published,description_sale,active'},
-    {key:'sales',label:'Sales Bundle',model:'sale.order',icon:'₿',desc:'Sales order beserta line, customer, produk, user sales.',fields:'name,display_name,partner_id,date_order,state,amount_total,invoice_status,user_id,validity_date,note'},
-    {key:'knowledge',label:'Knowledge Bundle',model:'knowledge.article',icon:'✦',desc:'Knowledge article beserta parent/child article.',fields:'name,display_name,parent_id,body,body_html,create_date,write_date'}
-  ];
-  const HELPER_SHEETS = new Set(['readme','readme_import','readme_export','dashboard','validation_report','relationship_map','task_hierarchy','logs','chatter_project','chatter_tasks']);
-  const META = new Set(['_model','__action','_external_id','external_id','id','x_studio2_odoo_id','__rownum__','_studio2_truncated_fields','_studio2_note','_studio2_error']);
-  function save(){ localStorage.setItem(STORAGE, JSON.stringify({conn: state.conn})); }
-  function load(){ try{ const raw=JSON.parse(localStorage.getItem(STORAGE)||'{}'); if(raw.conn) state.conn={...state.conn,...raw.conn}; }catch{} }
-  function log(level,msg,detail){ state.logs.unshift({time:new Date().toLocaleTimeString('id-ID',{hour12:false}),level,msg,detail}); state.logs=state.logs.slice(0,160); render(); }
-  function setBusy(v){ state.busy=v; render(); }
-  function esc(v){ return String(v??'').replace(/[&<>"]/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s])); }
-  function compact(v,n=72){ const s=String(v??''); return s.length>n?s.slice(0,n)+'…':s; }
-  function fields(text){ return String(text||'').split(',').map(x=>x.trim()).filter(Boolean); }
-  function currentSheet(){ return state.sheets[state.activeSheet]; }
-  function selectedModelList(){ const arr = MODELS.filter(m=>state.selectedModels[m.key]); if(state.customModel.trim()) arr.push({key:'custom',label:'Custom',model:state.customModel.trim(),kind:'dynamic',icon:'◇',risk:'advanced',desc:'Model custom Odoo',fields:state.customFields}); return arr; }
-  function kindFromModel(model,name=''){
-    const m=String(model||'').toLowerCase(); const s=String(name||'').toLowerCase();
-    if(HELPER_SHEETS.has(s)) return 'helper'; if(m==='res.partner') return 'contact'; if(m.startsWith('product.')) return 'product'; if(m.startsWith('project.')) return 'project'; if(m==='knowledge.article') return 'knowledge'; if(m.startsWith('sale.')) return 'sales'; return 'dynamic';
+
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>'"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[m]));
   }
-  function detectModel(name,rows){ const r=rows.find(x=>x._model); if(r) return String(r._model).trim(); const m={contacts:'res.partner',contact:'res.partner',partner:'res.partner',partners:'res.partner',products:'product.template',product:'product.template',project:'project.project',projects:'project.project',task:'project.task',tasks:'project.task',knowledge:'knowledge.article',sales:'sale.order'}; return m[String(name).toLowerCase()]||name; }
-  function columns(rows){ const s=new Set(); rows.forEach(r=>Object.keys(r).forEach(k=>s.add(k))); return [...s]; }
-  function important(kind){ return kind==='contact'?['name','display_name','phone','mobile','email','street','city','supplier_rank','customer_rank','is_company','comment']:kind==='product'?['name','default_code','barcode','list_price','standard_price','categ_id','public_categ_ids','website_published','description_sale','image_1920','image_url','x_source_image_url']:kind==='project'?['name','project_id','parent_id','stage_id','user_id','user_ids','partner_id','date_deadline','description','priority']:kind==='knowledge'?['name','body','body_html','parent_id']:kind==='sales'?['name','partner_id','date_order','state','amount_total','invoice_status']:['display_name','name','create_date','write_date']; }
-  async function loadXLSX(){ if(window.XLSX) return window.XLSX; await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.onload=res; s.onerror=()=>rej(new Error('Gagal memuat SheetJS dari CDN.')); document.head.appendChild(s);}); return window.XLSX; }
-  async function api(body, opts={}){ const r=await fetch('/api/odoo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,connection:state.conn})}); let j; try{ j=await r.json(); }catch{ throw new Error('API Studio mengembalikan response non-JSON.'); } if(!j.ok && !opts.allowFail){ const e=new Error(formatApiError(j)); e.payload=j; throw e; } return j; }
-  function formatApiError(j){ if(!j) return 'API Odoo error'; const parts=[]; if(j.error) parts.push(j.error); if(Array.isArray(j.results)){ const errs=j.results.filter(r=>r.status==='error').slice(0,5).map(r=>`row ${r.row}${r.model?' '+r.model:''}: ${r.error}`); if(errs.length) parts.push(errs.join(' | ')); } return parts.join(' — ') || 'API Odoo error'; }
-  async function checkServer(){ try{ const r=await fetch('/api/odoo',{cache:'no-store'}); const j=await r.json(); state.server={checked:true,...(j.connection||{})}; }catch{ state.server={checked:true,env_configured:false,source:'unknown',env_missing:['/api/odoo tidak terbaca']}; } render(); }
-  function parseDomain(){ try{ const d=JSON.parse(state.domain||'[]'); return Array.isArray(d)?d:[]; }catch{ return []; } }
-  function sanitize(v){ if(v==null) return ''; if(typeof v==='object') return JSON.stringify(v).slice(0,SAFE_LIMIT); const s=String(v); return s.length>SAFE_LIMIT?s.slice(0,SAFE_LIMIT):v; }
-  async function testConn(){ setBusy(true); try{ const j=await api({action:'test'}); log('ok',`Odoo tersambung. UID ${j.uid}. Contacts ${j.partner_count}.`);}catch(e){log('error','Koneksi gagal: '+e.message)} finally{setBusy(false)} }
-  async function readFile(file){ setBusy(true); try{ const XLSX=await loadXLSX(); const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true}); state.sheets=wb.SheetNames.map(name=>{ const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{defval:''}).map((r,i)=>({...r,__rownum__:i+2})); const model=detectModel(name,rows); const kind=kindFromModel(model,name); let cols=columns(rows); if(kind!=='helper'){ ['_external_id','__action','_model'].reverse().forEach(c=>{if(!cols.includes(c)) cols.unshift(c);}); rows.forEach(r=>{ if(!r._model) r._model=model; if(!r.__action) r.__action='upsert'; }); } return {name,rows,model,kind,cols,helper:kind==='helper'}; }); state.activeSheet=0; state.mission='import'; log('ok',`${file.name} dibaca: ${state.sheets.length} sheet.`); }catch(e){log('error','Gagal baca XLSX: '+e.message)} finally{setBusy(false)} }
-  function issuesForSheet(sheet){ if(!sheet||sheet.helper) return [{level:'ok',title:'Sheet konteks/helper',detail:'Tidak wajib import.'}]; const iss=[]; if(!sheet.model) iss.push({level:'error',title:'Model kosong',detail:'Isi _model atau nama sheet sesuai model Odoo.'}); if(sheet.kind==='product'){ const emptyPrice=sheet.rows.filter(r=>!r.list_price && r.list_price!==0).length; const emptyPhoto=sheet.rows.filter(r=>!r.image_url&&!r.x_source_image_url&&!r.image_1920).length; const emptyBarcode=sheet.rows.filter(r=>!r.barcode&&!r.default_code).length; if(emptyPrice) iss.push({level:'warn',title:`${emptyPrice} produk belum punya harga`,detail:'Isi list_price sebelum import produk survey.'}); if(emptyPhoto) iss.push({level:'warn',title:`${emptyPhoto} produk belum punya foto`,detail:'Isi image_url / x_source_image_url atau validasi manual.'}); if(emptyBarcode) iss.push({level:'warn',title:`${emptyBarcode} produk belum punya barcode/default code`,detail:'Wajib untuk hasil barcode scanner.'}); }
-    const emptyName=sheet.rows.filter(r=>!r.name&&!r.display_name).length; if(emptyName) iss.push({level:'warn',title:`${emptyName} row tanpa nama`,detail:'Field name/display_name kosong.'}); if(!iss.length) iss.push({level:'ok',title:'Siap direview',detail:'Tidak ada masalah dasar yang terlihat.'}); return iss; }
-  function updateCell(i,c,v){ const sh=currentSheet(); if(!sh) return; sh.rows[i][c]=v; if(!sh.cols.includes(c)) sh.cols.push(c); render(); }
-  function addColumn(){ const c=prompt('Nama kolom/field Odoo:'); if(!c) return; const sh=currentSheet(); if(sh&&!sh.cols.includes(c)){sh.cols.push(c); sh.rows.forEach(r=>r[c]=''); render();} }
-  async function loadSchema(){ const sh=currentSheet(); if(!sh) return; setBusy(true); try{ const j=await api({action:'schema',model:sh.model}); state.schema=j.fields; log('ok',`Schema ${sh.model}: ${Object.keys(j.fields||{}).length} field.`);}catch(e){log('error','Schema gagal: '+e.message)} finally{setBusy(false)} }
-  async function importActive(){ const sh=currentSheet(); if(!sh||sh.helper) return; await importSheets([sh]); }
-  async function importAll(){ const list=state.sheets.filter(s=>!s.helper&&s.rows.length); await importSheets(list); }
-  async function importSheets(list){ setBusy(true); try{ for(const sh of list){ const chunks=[]; for(let i=0;i<sh.rows.length;i+=state.batchSize) chunks.push(sh.rows.slice(i,i+state.batchSize)); let n=0; for(const rows of chunks){ n+=rows.length; const j=await api({action:'import_batch',model:sh.model,rows},{allowFail:true}); const level=j.failed?'warn':'ok'; log(level,`${sh.name}: import ${n}/${sh.rows.length} | created ${j.created||0} updated ${j.updated||0} skipped ${j.skipped||0} failed ${j.failed||0}`); if(!j.ok && (j.error||j.failed)){ const errRows=(j.results||[]).filter(r=>r.status==='error').slice(0,6); if(errRows.length) log('error', errRows.map(r=>`row ${r.row} ${r.model||''}: ${r.error}`).join(' | ')); else log('error', formatApiError(j)); } } } }catch(e){log('error','Import berhenti karena error sistem: '+e.message)} finally{setBusy(false)} }
-  async function scanModels(reset=true){ setBusy(true); try{ for(const m of selectedModelList()){ const current=state.scans[m.model]||{records:[],count:0,offset:0,fields:m.fields,label:m.label}; const offset=reset?0:current.records.length; const j=await api({action:'record_scan',model:m.model,domain:parseDomain(),fields:fields(m.fields),limit:80,offset}); state.scans[m.model]={...current,label:m.label,fields:m.fields,records:reset?j.records:[...current.records,...j.records],count:j.count,offset:offset+j.records.length,has_more:j.has_more}; log('ok',`${m.label}: ${j.records.length} record dimuat (${offset+j.records.length}/${j.count}).`); }
-  }catch(e){log('error','Scan gagal: '+e.message)} finally{setBusy(false)} }
-  async function loadAllChecked(){ setBusy(true); try{ for(const m of selectedModelList()){ let records=[]; let offset=0; let count=0; while(offset<2000){ const j=await api({action:'record_scan',model:m.model,domain:parseDomain(),fields:fields(m.fields),limit:200,offset}); records=records.concat(j.records); count=j.count; offset+=j.records.length; log('info',`${m.label}: memuat ${records.length}/${count}`); if(!j.has_more||!j.records.length||records.length>=2000) break; }
-        state.scans[m.model]={label:m.label,fields:m.fields,records,count,offset:records.length,has_more:records.length<count}; }
-      log('ok','Semua record model yang dicentang sudah dimuat bertahap.');
-  }catch(e){log('error','Muat semua gagal: '+e.message)} finally{setBusy(false)} }
-  function visibleRecords(){ const out=[]; const query=state.search.toLowerCase().trim(); Object.entries(state.scans).forEach(([model,b])=>{ if(state.activeRecordModel!=='all' && state.activeRecordModel!==model) return; (b.records||[]).forEach(r=>{ const text=JSON.stringify(r).toLowerCase(); if(!query||text.includes(query)) out.push({model,row:r,label:b.label}); }); }); return out; }
-  function selectVisible(on=true){ visibleRecords().forEach(x=>{ state.selected[`${x.model}:${x.row.id}`]=on; }); render(); }
-  function selectLoaded(on=true){ Object.entries(state.scans).forEach(([model,b])=>(b.records||[]).forEach(r=>state.selected[`${model}:${r.id}`]=on)); render(); }
-  function selectedGroups(){ const g={}; Object.entries(state.selected).forEach(([key,on])=>{ if(!on) return; const idx=key.lastIndexOf(':'); const model=key.slice(0,idx); const id=Number(key.slice(idx+1)); if(!g[model]) g[model]=[]; g[model].push(id); }); return g; }
-  async function exportSelected(){ const groups=selectedGroups(); const models=Object.keys(groups); if(!models.length){ log('warn','Belum ada record dipilih. Klik Pilih semua dimuat atau pilih record dulu.'); return;} setBusy(true); try{ const XLSX=await loadXLSX(); const wb=XLSX.utils.book_new(); for(const model of models){ const preset=[...MODELS,{model:state.customModel,fields:state.customFields,label:'Custom'}].find(x=>x.model===model) || {fields:'name,display_name,create_date,write_date'}; const j=await api({action:'export_records',model,ids:groups[model],fields:fields(preset.fields)}); const ws=XLSX.utils.json_to_sheet(j.rows.map(r=>Object.fromEntries(Object.entries(r).map(([k,v])=>[k,sanitize(v)])))); XLSX.utils.book_append_sheet(wb,ws,model.slice(0,31)); log('ok',`${model}: ${j.rows.length} row diekspor.`); }
-      const manifest=[{exported_at:new Date().toISOString(),models:models.join(', '),note:'Studio3 v10.5 multi-model export'}]; XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(manifest),'export_manifest'); XLSX.writeFile(wb,`studio3_multimodel_export_${Date.now()}.xlsx`);
-  }catch(e){log('error','Export gagal: '+e.message)} finally{setBusy(false)} }
-  async function scanBundle(){ const b=BUNDLES.find(x=>x.key===state.bundleKey); if(!b) return; setBusy(true); try{ const j=await api({action:'record_scan',model:b.model,domain:parseDomain(),fields:fields(b.fields),limit:80,offset:0}); state.bundleScans[b.model]={...b,records:j.records,count:j.count}; log('ok',`${b.label}: ${j.records.length}/${j.count} record utama dimuat.`);}catch(e){log('error','Scan bundle gagal: '+e.message)} finally{setBusy(false)} }
-  async function exportBundle(){ const b=BUNDLES.find(x=>x.key===state.bundleKey); if(!b) return; const sel=Object.entries(state.bundleSelected).filter(([k,v])=>v&&k.startsWith(b.model+':')).map(([k])=>Number(k.split(':').pop())).filter(Boolean); if(!sel.length){ log('warn','Pilih record utama bundle dulu.'); return;} setBusy(true); try{ const j=await api({action:'export_bundle',bundle:b.key,primary_model:b.model,ids:sel,fields:fields(b.fields),includes:state.bundleIncludes}); const XLSX=await loadXLSX(); const wb=XLSX.utils.book_new(); Object.entries(j.sheets||{}).forEach(([name,rows])=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet((rows||[]).map(r=>Object.fromEntries(Object.entries(r).map(([k,v])=>[k,sanitize(v)])))),name.slice(0,31))); XLSX.writeFile(wb,`studio3_${b.key}_bundle_${Date.now()}.xlsx`); log('ok',`${b.label} selesai: ${Object.keys(j.sheets||{}).length} sheet.`);}catch(e){log('error','Export bundle gagal: '+e.message)} finally{setBusy(false)} }
-  async function downloadWorkbook(){ if(!state.sheets.length) return; const XLSX=await loadXLSX(); const wb=XLSX.utils.book_new(); state.sheets.forEach(sh=>{ const rows=sh.rows.map(r=>Object.fromEntries(Object.entries(r).map(([k,v])=>[k,sanitize(v)]))); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),sh.name.slice(0,31));}); XLSX.writeFile(wb,`studio3_review_${Date.now()}.xlsx`); }
-  function render(){ const active=currentSheet(); const selectedCount=Object.values(state.selected).filter(Boolean).length; const scanModelsLoaded=Object.keys(state.scans).length; $('#app').innerHTML = `
-    <div class="app">
-      <div class="top"><div class="top-inner"><div class="logo">L</div><div class="brand"><h1>Lokalmart Studio3</h1><p>Odoo Import · Export · Review Gate</p></div><div class="status"><span class="pill ${(state.server.env_configured||state.conn.url)?'ok':'warn'}">${state.server.env_configured?'Env Vercel aktif':state.conn.url?'Odoo target siap':'Koneksi belum diisi'}</span><span class="pill">${state.busy?'Working…':'Idle'}</span></div></div></div>
-      <div class="tabs">
-        ${tab('home','⌁','Home')}${tab('import','⇪','Import')}${tab('export','⇩','Export')}${tab('settings','⚙','Koneksi')}
-      </div>
-      <main class="main-with-nav">
-        ${state.mission==='home'?homeView():''}
-        ${state.mission==='import'?importView(active):''}
-        ${state.mission==='export'?exportView(selectedCount,scanModelsLoaded):''}
-        ${state.mission==='settings'?settingsView():''}
-        <section class="card soft" style="margin-top:14px"><div class="card-title"><div><h3>Log</h3><small>Teknis disembunyikan, tapi tetap bisa dicek saat ada error.</small></div><button class="btn small" data-action="clearLogs">Clear</button></div><div class="logs">${state.logs.length?state.logs.map(l=>`<div class="log ${l.level}"><b>${esc(l.time)} · ${esc(l.level)}</b><br>${esc(l.msg)}</div>`).join(''):'<div class="empty">Belum ada log.</div>'}</div></section>
+
+  function log(level, msg) {
+    state.logs.unshift({ time: new Date().toLocaleTimeString('id-ID'), level, msg: String(msg || '') });
+    state.logs = state.logs.slice(0, 80);
+    render();
+  }
+
+  function setBusy(on) {
+    state.busy = on;
+    render();
+  }
+
+  function save() {
+    localStorage.setItem(STORE, JSON.stringify({ conn: state.conn, batchSize: state.batchSize, customModels: state.customModels }));
+  }
+
+  function load() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORE) || '{}');
+      if (saved.conn) state.conn = saved.conn;
+      if (saved.batchSize) state.batchSize = saved.batchSize;
+      if (saved.customModels) state.customModels = saved.customModels;
+    } catch {}
+  }
+
+  async function api(payload) {
+    const res = await fetch('/api/odoo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connection: state.conn, ...payload })
+    });
+    const text = await res.text();
+    let json;
+    try { json = JSON.parse(text); } catch { throw new Error(`Server non-JSON ${res.status}: ${text.slice(0, 300)}`); }
+    if (!json.ok && !json.blocked_by_preflight) throw new Error(json.error || JSON.stringify(json).slice(0, 400));
+    return json;
+  }
+
+  async function checkServer() {
+    try {
+      const j = await (await fetch('/api/odoo')).json();
+      state.server = j.connection || {};
+      log('ok', `API aktif: ${j.app || 'New Studio'}`);
+    } catch (e) {
+      log('error', `API tidak terbaca: ${e.message}`);
+    }
+  }
+
+  async function testConn() {
+    setBusy(true);
+    try {
+      const j = await api({ action: 'test' });
+      log('ok', `Login Odoo sukses. UID ${j.uid}. Contacts ${j.partner_count}. Source ${j.connection_source}.`);
+    } catch (e) {
+      log('error', `Koneksi gagal: ${e.message}`);
+    } finally { setBusy(false); }
+  }
+
+  function detectModel(sheetName, rows) {
+    const fromRow = rows.find(r => r._model)?._model;
+    if (fromRow) return String(fromRow).trim();
+    const n = String(sheetName || '').trim();
+    const lower = n.toLowerCase();
+    if (MODEL_PRESETS.some(([m]) => m === n)) return n;
+    const aliases = {
+      task: 'project.task', tasks: 'project.task', project: 'project.project', projects: 'project.project',
+      product: 'product.template', products: 'product.template', partner: 'res.partner', contact: 'res.partner', contacts: 'res.partner',
+      category: 'product.category', fields: 'ir.model.fields', field: 'ir.model.fields', model: 'ir.model', models: 'ir.model', acl: 'ir.model.access', access: 'ir.model.access',
+      knowledge: 'knowledge.article', article: 'knowledge.article', view: 'ir.ui.view', qweb: 'ir.ui.view', page: 'website.page'
+    };
+    return aliases[lower] || n;
+  }
+
+  function isHelperSheet(name) {
+    const n = String(name || '').toLowerCase();
+    return n.startsWith('__') || n.includes('schema.') || n.includes('preflight.') || n.includes('ai.') || n.includes('manifest') || n.includes('readme');
+  }
+
+  function columns(rows) {
+    const set = new Set();
+    rows.slice(0, 1000).forEach(r => Object.keys(r).forEach(k => set.add(k)));
+    return [...set];
+  }
+
+  async function loadXLSX() {
+    if (window.XLSX) return window.XLSX;
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Gagal memuat SheetJS/XLSX CDN.'));
+      document.head.appendChild(s);
+    });
+    return window.XLSX;
+  }
+
+  async function readWorkbook(file) {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const XLSX = await loadXLSX();
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+      state.sheets = wb.SheetNames.map(name => {
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '', raw: false }).map((r, i) => ({ ...r, __rownum__: i + 2 }));
+        const helper = isHelperSheet(name);
+        const model = helper ? '' : detectModel(name, rows);
+        const cols = columns(rows);
+        if (!helper) {
+          ['_model', '__action', '_external_id'].reverse().forEach(c => { if (!cols.includes(c)) cols.unshift(c); });
+          rows.forEach(r => { if (!r._model) r._model = model; if (!r.__action) r.__action = 'upsert'; });
+        }
+        return { name, model, rows, cols, helper };
+      });
+      state.active = 0;
+      state.preflight = null;
+      state.importResults = null;
+      log('ok', `${file.name} dibaca: ${state.sheets.length} sheet, ${state.sheets.reduce((a,s)=>a+s.rows.length,0)} rows.`);
+    } catch (e) { log('error', `Gagal baca XLSX: ${e.message}`); }
+    finally { setBusy(false); }
+  }
+
+  function activeSheet() { return state.sheets[state.active]; }
+  function importableSheets() { return state.sheets.filter(s => !s.helper && s.rows.length && (s.model || s.rows.some(r => r._model))); }
+
+  function modelsFromWorkbook() {
+    const set = new Set();
+    importableSheets().forEach(s => {
+      if (s.model) set.add(s.model);
+      s.rows.forEach(r => { if (r._model) set.add(String(r._model).trim()); });
+    });
+    String(state.customModels || '').split(/[;,\n]/).map(x => x.trim()).filter(Boolean).forEach(x => set.add(x));
+    return [...set].filter(Boolean);
+  }
+
+  function sanitize(v) {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'object') return JSON.stringify(v).slice(0, 32000);
+    return String(v).length > 32000 ? String(v).slice(0, 32000) : v;
+  }
+
+  async function downloadSheetsAsXlsx(sheets, filename) {
+    const XLSX = await loadXLSX();
+    const wb = XLSX.utils.book_new();
+    Object.entries(sheets || {}).forEach(([name, rows]) => {
+      const clean = (rows || []).map(r => Object.fromEntries(Object.entries(r || {}).map(([k, v]) => [k, sanitize(v)])));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(clean.length ? clean : [{ empty: '' }]), name.slice(0, 31));
+    });
+    XLSX.writeFile(wb, filename);
+  }
+
+  async function exportSchemaSnapshot(format = 'xlsx') {
+    setBusy(true);
+    try {
+      const models = modelsFromWorkbook();
+      const j = await api({ action: 'schema_snapshot', models, sheets: importableSheets().map(s => ({ name: s.name, model: s.model, rows: s.rows.slice(0, 5) })) });
+      state.schemaSnapshot = j;
+      if (format === 'json') {
+        downloadText(JSON.stringify(j.context || j, null, 2), `lokalmart_odoo_schema_context_${Date.now()}.json`, 'application/json');
+      } else if (format === 'txt') {
+        downloadText(aiPrompt(j.context || j), `chatgpt_ai_context_schema_${Date.now()}.txt`, 'text/plain');
+      } else {
+        await downloadSheetsAsXlsx(j.sheets, `lokalmart_odoo_real_schema_${Date.now()}.xlsx`);
+      }
+      log(j.ok ? 'ok' : 'warn', `Schema snapshot selesai. Models: ${(j.context?.models || []).length}, error: ${(j.context?.errors || []).length}.`);
+    } catch (e) { log('error', `Schema snapshot gagal: ${e.message}`); }
+    finally { setBusy(false); }
+  }
+
+  function aiPrompt(context) {
+    return [
+      'KONTEKS WAJIB UNTUK CHATGPT SEBELUM MEMBUAT XLSX ODOO LOKALMART',
+      '',
+      'Tugas ChatGPT: buat XLSX import-safe hanya berdasarkan schema real berikut. Jangan menebak field.',
+      'Aturan: gunakan _model, __action, _external_id; many2one memakai *_external_id; many2many memakai *_external_ids; custom field/model memakai x_*; jalankan preflight sebelum import.',
+      '',
+      JSON.stringify(context, null, 2)
+    ].join('\n');
+  }
+
+  function downloadText(text, filename, mime) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: mime || 'text/plain' }));
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function issueCounts(issues) {
+    return {
+      errors: (issues || []).filter(x => x.level === 'error').length,
+      warnings: (issues || []).filter(x => x.level === 'warn').length
+    };
+  }
+
+  async function preflight(all = true) {
+    const sheets = all ? importableSheets() : [activeSheet()].filter(Boolean).filter(s => !s.helper);
+    if (!sheets.length) { log('warn', 'Tidak ada sheet importable untuk preflight.'); return; }
+    setBusy(true);
+    try {
+      const payload = { action: 'preflight_import', sheets: sheets.map(s => ({ name: s.name, model: s.model, rows: s.rows })) };
+      const j = await api(payload);
+      state.preflight = j;
+      const c = issueCounts(j.issues);
+      log(j.ok ? 'ok' : 'error', `Preflight selesai: ${j.rows_checked} row. Error ${c.errors}, warning ${c.warnings}.`);
+      await downloadSheetsAsXlsx(j.sheets, `lokalmart_preflight_report_${Date.now()}.xlsx`);
+    } catch (e) { log('error', `Preflight gagal: ${e.message}`); }
+    finally { setBusy(false); }
+  }
+
+  async function importAll() {
+    const sheets = importableSheets();
+    if (!sheets.length) { log('warn', 'Tidak ada sheet importable.'); return; }
+    if (!state.preflight || !state.preflight.ok) {
+      log('warn', 'Import ditahan. Jalankan Preflight Semua dan pastikan error = 0. Ini pagar betisnya.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const allResults = [];
+      for (const sh of sheets) {
+        for (let i = 0; i < sh.rows.length; i += Number(state.batchSize || 40)) {
+          const rows = sh.rows.slice(i, i + Number(state.batchSize || 40));
+          const j = await api({ action: 'import_batch', sheet: sh.name, model: sh.model, rows, skipPreflight: true });
+          allResults.push({ sheet: sh.name, ...j });
+          const label = `${sh.name} ${i + 1}-${i + rows.length}/${sh.rows.length}`;
+          if (j.ok) log('ok', `${label}: created ${j.created}, updated ${j.updated}, failed ${j.failed}.`);
+          else log('error', `${label}: gagal ${j.failed || 0}.`);
+          const errors = (j.results || []).filter(r => r.status === 'error').slice(0, 6);
+          errors.forEach(r => log('error', `row ${r.row} ${r.model}: ${r.error}`));
+        }
+      }
+      state.importResults = allResults;
+      const sheetsOut = { 'import.summary': allResults.map(r => ({ sheet: r.sheet, processed: r.processed, created: r.created, updated: r.updated, deleted: r.deleted, skipped: r.skipped, failed: r.failed, ok: r.ok })) };
+      sheetsOut['import.rows'] = allResults.flatMap(r => (r.results || []).map(x => ({ sheet: r.sheet, ...x })));
+      await downloadSheetsAsXlsx(sheetsOut, `lokalmart_import_report_${Date.now()}.xlsx`);
+    } catch (e) { log('error', `Import berhenti: ${e.message}`); }
+    finally { setBusy(false); }
+  }
+
+  function quickIssues(sh) {
+    if (!sh) return [];
+    if (sh.helper) return [{ level: 'ok', message: 'Helper/schema sheet; tidak diimport.' }];
+    const out = [];
+    if (!sh.model) out.push({ level: 'error', message: 'Model kosong.' });
+    const unnamed = sh.rows.filter(r => !r.name && !r.display_name && !r._external_id && !r.external_id).length;
+    if (unnamed) out.push({ level: 'warn', message: `${unnamed} row tanpa name/display_name/_external_id.` });
+    const noAction = sh.rows.filter(r => !r.__action).length;
+    if (noAction) out.push({ level: 'warn', message: `${noAction} row tanpa __action.` });
+    if (!out.length) out.push({ level: 'ok', message: 'Cek dasar lolos. Tetap wajib preflight server.' });
+    return out;
+  }
+
+  function render() {
+    const sh = activeSheet();
+    const pf = state.preflight;
+    const c = issueCounts(pf?.issues || []);
+    $('#app').innerHTML = `
+      <header class="topbar">
+        <div class="brand"><span class="logo">L</span><div><strong>Lokalmart New Studio v11</strong><small>Schema Real → Preflight → Import Aman</small></div></div>
+        <div class="status ${state.busy ? 'busy' : ''}">${state.busy ? 'Working…' : 'Idle'}</div>
+      </header>
+      <nav class="nav">
+        ${tab('import','Import Gate')}${tab('schema','Schema AI')}${tab('report','Report')}${tab('settings','Koneksi')}
+      </nav>
+      <main>
+        ${state.nav === 'import' ? importView(sh) : ''}
+        ${state.nav === 'schema' ? schemaView() : ''}
+        ${state.nav === 'report' ? reportView(c) : ''}
+        ${state.nav === 'settings' ? settingsView() : ''}
       </main>
-    </div>`;
+      <section class="logs">
+        <div class="section-title"><h3>Log</h3><button data-action="clearLogs">Clear</button></div>
+        ${state.logs.length ? state.logs.map(l => `<div class="log ${esc(l.level)}"><b>${esc(l.time)} · ${esc(l.level)}</b><span>${esc(l.msg)}</span></div>`).join('') : '<p class="muted">Belum ada log.</p>'}
+      </section>
+    `;
     bind();
   }
-  function tab(id,icon,label){ return `<button class="tab ${state.mission===id?'active':''}" data-nav="${id}"><b>${icon}</b><span>${label}</span></button>`; }
-  function homeView(){ return `<section class="hero"><div class="hero-card"><div class="kicker">Command studio</div><h2>Satu gerbang validasi data sebelum menyentuh Odoo.</h2><p>Upload XLSX dari barcode scanner, validasi foto/harga/vendor, atau export banyak model Odoo sekaligus menjadi multi-sheet XLSX.</p></div></section><section class="mission-grid"><button class="mission" data-nav="import"><div class="icon">⇪</div><h3>Import Review</h3><p>Validasi XLSX lapangan, edit produk/contact/project, lalu import batch kecil.</p><span class="pill ok">Quality gate</span></button><button class="mission" data-nav="export"><div class="icon">⇩</div><h3>Export Command</h3><p>Centang banyak model, muat semua record, pilih massal, lalu export multi-sheet.</p><span class="pill ok">Multi-model</span></button></section>`; }
-  function importView(active){ return `<section class="grid two"><div class="card"><div class="card-title"><div><h3>1. Upload XLSX</h3><small>XLSX dari barcode scanner, export Odoo, atau patch ChatGPT.</small></div></div><div class="drop"><input type="file" accept=".xlsx,.xls" data-file="xlsx"><strong>Tap / klik untuk upload</strong><small>Pilih file XLSX untuk direview dulu.</small></div>${state.sheets.length?`<div class="sheet-row" style="margin-top:14px">${state.sheets.map((s,i)=>`<div class="sheet-card ${i===state.activeSheet?'active':''}" data-sheet="${i}"><div style="font-size:22px">${s.kind==='product'?'◈':s.kind==='contact'?'◎':s.kind==='project'?'▦':s.kind==='knowledge'?'✦':'◇'}</div><div><b>${esc(s.name)}</b><div class="meta">${esc(s.model)} · ${s.rows.length} row · ${s.helper?'helper':'importable'}</div></div></div>`).join('')}</div>`:''}</div><div class="card"><div class="card-title"><div><h3>2. Review Sheet</h3><small>${active?`${esc(active.name)} · ${esc(active.model)}`:'Belum ada sheet.'}</small></div></div>${active?sheetReview(active):'<div class="empty">Upload XLSX dulu.</div>'}</div></section>${active?editorView(active):''}`; }
-  function sheetReview(sh){ const iss=issuesForSheet(sh); return `<div class="grid">${iss.map(i=>`<div class="issue ${i.level}"><b>${esc(i.title)}</b><br><span>${esc(i.detail||'')}</span></div>`).join('')}<div class="btn-row"><button class="btn" data-action="schema">Cek schema</button><button class="btn" data-action="addColumn">Tambah kolom</button><button class="btn" data-action="downloadWorkbook">Download review</button><button class="btn primary" data-action="importActive">Import sheet aktif</button><button class="btn" data-action="importAll">Import semua sheet</button></div><div class="field"><label>Batch import</label><input class="input" type="number" data-input="batchSize" value="${state.batchSize}" min="1" max="80"></div></div>`; }
-  function editorView(sh){ const mode = `<div class="toolbar"><button class="btn small ${state.editorMode==='cards'?'primary':''}" data-mode="cards">Card editor</button><button class="btn small ${state.editorMode==='grid'?'primary':''}" data-mode="grid">Grid</button><span class="pill">${sh.rows.length} row</span><span class="pill">${sh.kind}</span></div>`; return `<section class="card" style="margin-top:14px"><div class="card-title"><div><h3>3. Editor ${esc(sh.kind)}</h3><small>Edit cepat sebelum import. Spreadsheet hanya mode tambahan.</small></div></div>${mode}${state.editorMode==='grid'?gridView(sh):cardsView(sh)}</section>`; }
-  function cardsView(sh){ const fieldsToShow=[...new Set([...important(sh.kind),...sh.cols.filter(c=>!META.has(c)).slice(0,10)])].filter(c=>sh.cols.includes(c)||important(sh.kind).includes(c)); return `<div class="grid">${sh.rows.slice(0,80).map((r,i)=>`<div class="row-card ${i<3?'open':''}"><div class="row-head"><button data-toggle-row>${esc(compact(r.name||r.display_name||r.default_code||('Row '+(i+1)),90))}<div class="meta">Row ${r.__rownum__||i+2} · ${esc(sh.model)}</div></button><span class="pill">${i+1}</span></div><div class="row-body">${fieldsToShow.map(c=>`<div class="field-inline"><label>${esc(c)}</label>${String(r[c]??'').length>80?`<textarea data-cell="${i}|${esc(c)}">${esc(r[c])}</textarea>`:`<input data-cell="${i}|${esc(c)}" value="${esc(r[c]??'')}">`}</div>`).join('')}</div></div>`).join('')}${sh.rows.length>80?`<div class="empty">Menampilkan 80 row pertama agar UI tetap ringan.</div>`:''}</div>`; }
-  function gridView(sh){ return `<div class="table-wrap"><table class="table"><thead><tr>${sh.cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${sh.rows.slice(0,120).map((r,i)=>`<tr>${sh.cols.map(c=>`<td><input data-cell="${i}|${esc(c)}" value="${esc(r[c]??'')}"></td>`).join('')}</tr>`).join('')}</tbody></table></div>`; }
-  function exportView(selectedCount,loaded){ return `<section class="grid two"><div class="card"><div class="card-title"><div><h3>1. Pilih mode export</h3><small>Single model bisa centang banyak model sekaligus.</small></div></div><div class="btn-row"><button class="btn ${state.exportMode==='single'?'primary':''}" data-export-mode="single">Single / Multi-model</button><button class="btn ${state.exportMode==='bundle'?'primary':''}" data-export-mode="bundle">Smart Bundle</button></div>${state.exportMode==='single'?singleExportControls():bundleControls()}</div><div class="card"><div class="card-title"><div><h3>2. Record Picker</h3><small>${state.exportMode==='single'?`${selectedCount} record dipilih · ${loaded} model dimuat`:'Pilih record utama bundle'}</small></div></div>${state.exportMode==='single'?recordPicker():bundlePicker()}</div></section>`; }
-  function singleExportControls(){ return `<div style="height:12px"></div><div class="preset-row">${MODELS.map(m=>`<label class="preset-card ${state.selectedModels[m.key]?'active':''}"><input type="checkbox" data-model-key="${m.key}" ${state.selectedModels[m.key]?'checked':''}><div><b>${m.icon} ${m.label}</b><div class="meta">${m.model}<br>${m.desc}</div></div></label>`).join('')}</div><details class="advanced" style="margin-top:12px"><summary>Advanced: custom model & domain</summary><div class="inside"><div class="field"><label>Custom model</label><input class="input" data-input="customModel" value="${esc(state.customModel)}" placeholder="x_lokalmart_model"></div><div class="field"><label>Custom fields</label><textarea class="textarea" data-input="customFields">${esc(state.customFields)}</textarea></div><div class="field"><label>Domain JSON</label><textarea class="textarea" data-input="domain">${esc(state.domain)}</textarea></div></div></details><div class="btn-row" style="margin-top:12px"><button class="btn primary" data-action="scanModels">Scan model dicentang</button><button class="btn" data-action="loadAllChecked">Muat semua dicentang</button></div>`; }
-  function recordPicker(){ const records=visibleRecords(); const modelTabs=['all',...Object.keys(state.scans)]; return `<div class="field"><label>Cari record</label><input class="input" data-input="search" value="${esc(state.search)}" placeholder="Cari nama, email, barcode..."></div><div class="btn-row">${modelTabs.map(m=>`<button class="btn small ${state.activeRecordModel===m?'primary':''}" data-record-model="${m}">${m==='all'?'Semua':compact(m,18)} ${m==='all'?'':`(${(state.scans[m]?.records||[]).length}/${state.scans[m]?.count||0})`}</button>`).join('')}</div><div class="btn-row" style="margin:12px 0"><button class="btn small" data-action="selectVisible">Pilih yang tampil</button><button class="btn small" data-action="selectLoaded">Pilih semua dimuat</button><button class="btn small" data-action="clearVisible">Bersihkan tampil</button><button class="btn small danger" data-action="clearLoaded">Bersihkan semua</button></div><div class="record-list">${records.length?records.slice(0,300).map(x=>{const key=`${x.model}:${x.row.id}`;return `<label class="record-card ${state.selected[key]?'selected':''}"><input type="checkbox" data-record-key="${esc(key)}" ${state.selected[key]?'checked':''}><div><b>${esc(compact(x.row.display_name||x.row.name||x.row.email||x.row.default_code||x.row.id,70))}</b><div class="meta">${esc(x.model)} · ID ${esc(x.row.id)}<br>${esc(compact(x.row.email||x.row.phone||x.row.mobile||x.row.barcode||x.row.create_date||'',90))}</div></div></label>`}).join(''):'<div class="empty">Belum ada record dimuat. Klik Scan / Muat semua.</div>'}</div><div class="btn-row" style="margin-top:14px"><button class="btn primary" data-action="exportSelected">Export record dipilih menjadi multi-sheet XLSX</button></div>`; }
-  function bundleControls(){ return `<div style="height:12px"></div><div class="preset-row">${BUNDLES.map(b=>`<label class="preset-card ${state.bundleKey===b.key?'active':''}"><input type="radio" name="bundle" data-bundle-key="${b.key}" ${state.bundleKey===b.key?'checked':''}><div><b>${b.icon} ${b.label}</b><div class="meta">${b.model}<br>${b.desc}</div></div></label>`).join('')}</div><details class="advanced" style="margin-top:12px"><summary>Advanced domain</summary><div class="inside"><div class="field"><label>Domain JSON</label><textarea class="textarea" data-input="domain">${esc(state.domain)}</textarea></div></div></details><div class="btn-row" style="margin-top:12px"><button class="btn primary" data-action="scanBundle">Scan record utama</button></div>`; }
-  function bundlePicker(){ const b=BUNDLES.find(x=>x.key===state.bundleKey); const box=state.bundleScans[b?.model]||{records:[]}; return `<div class="record-list">${(box.records||[]).length?(box.records||[]).map(r=>{const key=`${b.model}:${r.id}`;return `<label class="record-card ${state.bundleSelected[key]?'selected':''}"><input type="checkbox" data-bundle-record="${esc(key)}" ${state.bundleSelected[key]?'checked':''}><div><b>${esc(compact(r.display_name||r.name||r.id,80))}</b><div class="meta">${esc(b.model)} · ID ${esc(r.id)}</div></div></label>`}).join(''):'<div class="empty">Scan record utama bundle dulu.</div>'}</div><div class="btn-row" style="margin-top:14px"><button class="btn small" data-action="selectBundleVisible">Pilih semua record utama</button><button class="btn small danger" data-action="clearBundle">Bersihkan</button><button class="btn primary" data-action="exportBundle">Export Smart Bundle</button></div>`; }
-  function settingsView(){ const env=state.server||{}; return `<section class="card"><div class="card-title"><div><h3>Koneksi Odoo</h3><small>${env.env_configured?'Aktif dari Vercel Environment Variables. Credential tidak perlu diketik di browser.':'Env Vercel belum lengkap; browser fallback masih tersedia.'}</small></div></div><div class="notice ${env.env_configured?'ok':'warn'}"><b>${env.env_configured?'Mode aman: Vercel ENV':'Mode fallback browser'}</b><br>${esc(env.public_hint||'Mengecek status koneksi server...')}${env.env_missing?.length?`<br><small>Kurang: ${esc(env.env_missing.join(', '))}</small>`:''}</div><details class="advanced" ${env.env_configured?'':'open'} style="margin-top:12px"><summary>${env.env_configured?'Fallback koneksi browser':'Isi koneksi browser sementara'}</summary><div class="inside"><div class="grid two"><div><div class="field"><label>Odoo URL</label><input class="input" data-conn="url" value="${esc(state.conn.url)}" placeholder="https://namadb.odoo.com"></div><div class="field"><label>Database</label><input class="input" data-conn="db" value="${esc(state.conn.db)}"></div></div><div><div class="field"><label>Email / Username</label><input class="input" data-conn="username" value="${esc(state.conn.username)}"></div><div class="field"><label>Password / API key</label><input class="input" type="password" data-conn="password" value="${esc(state.conn.password)}"></div></div></div></div></details><div class="btn-row"><button class="btn primary" data-action="test">Test koneksi</button><button class="btn" data-action="refreshServer">Cek ENV</button><button class="btn danger" data-action="clearConn">Hapus koneksi browser</button></div><div class="mini-doc"><b>Nama ENV di Vercel:</b><br><code>ODOO_URL</code>, <code>ODOO_DB</code>, <code>ODOO_USERNAME</code>, <code>ODOO_PASSWORD</code> atau <code>ODOO_API_KEY</code></div></section>`; }
-    function bind(){ $$('[data-nav]').forEach(b=>b.onclick=()=>{state.mission=b.dataset.nav; render();}); $('[data-file="xlsx"]')?.addEventListener('change',e=>readFile(e.target.files[0])); $$('[data-sheet]').forEach(x=>x.onclick=()=>{state.activeSheet=Number(x.dataset.sheet); render();}); $$('[data-input]').forEach(x=>x.oninput=()=>{ const k=x.dataset.input; const v=x.type==='number'?Number(x.value):x.value; state[k]=v; }); $$('[data-conn]').forEach(x=>x.oninput=()=>{state.conn[x.dataset.conn]=x.value; save();}); $$('[data-cell]').forEach(x=>x.onchange=()=>{ const [i,c]=x.dataset.cell.split('|'); updateCell(Number(i),c,x.value); }); $$('[data-toggle-row]').forEach(x=>x.onclick=()=>x.closest('.row-card').classList.toggle('open')); $$('[data-mode]').forEach(x=>x.onclick=()=>{state.editorMode=x.dataset.mode; render();}); $$('[data-export-mode]').forEach(x=>x.onclick=()=>{state.exportMode=x.dataset.exportMode; render();}); $$('[data-model-key]').forEach(x=>x.onchange=()=>{state.selectedModels[x.dataset.modelKey]=x.checked; render();}); $$('[data-record-key]').forEach(x=>x.onchange=()=>{state.selected[x.dataset.recordKey]=x.checked; render();}); $$('[data-record-model]').forEach(x=>x.onclick=()=>{state.activeRecordModel=x.dataset.recordModel; render();}); $$('[data-bundle-key]').forEach(x=>x.onchange=()=>{state.bundleKey=x.dataset.bundleKey; render();}); $$('[data-bundle-record]').forEach(x=>x.onchange=()=>{state.bundleSelected[x.dataset.bundleRecord]=x.checked; render();}); $$('[data-action]').forEach(b=>b.onclick=()=>actions[b.dataset.action]?.()); }
-  const actions = { test:testConn, clearConn:()=>{state.conn={url:'',db:'',username:'',password:''}; save(); render();}, clearLogs:()=>{state.logs=[];render();}, refreshServer:checkServer, schema:loadSchema, addColumn, downloadWorkbook, importActive, importAll, scanModels:()=>scanModels(true), loadAllChecked, selectVisible:()=>selectVisible(true), selectLoaded:()=>selectLoaded(true), clearVisible:()=>selectVisible(false), clearLoaded:()=>selectLoaded(false), exportSelected, scanBundle, exportBundle, selectBundleVisible:()=>{const b=BUNDLES.find(x=>x.key===state.bundleKey); const box=state.bundleScans[b.model]||{records:[]}; box.records.forEach(r=>state.bundleSelected[`${b.model}:${r.id}`]=true); render();}, clearBundle:()=>{state.bundleSelected={}; render();} };
-  load(); render(); checkServer();
+
+  function tab(key, label) {
+    return `<button class="tab ${state.nav === key ? 'on' : ''}" data-nav="${key}">${label}</button>`;
+  }
+
+  function importView(sh) {
+    return `
+      <section class="hero">
+        <h1>Jangan import dalam gelap.</h1>
+        <p>Upload XLSX → export schema real untuk ChatGPT → jalankan preflight komprehensif → baru import batch kecil.</p>
+      </section>
+      <section class="card">
+        <div class="section-title"><h2>1. Upload XLSX</h2><label class="upload">Pilih XLSX<input type="file" accept=".xlsx,.xls" data-file="xlsx"></label></div>
+        ${state.sheets.length ? `<div class="sheets">${state.sheets.map((s,i)=>`<button class="sheet ${i===state.active?'on':''} ${s.helper?'helper':''}" data-sheet="${i}"><b>${esc(s.name)}</b><span>${esc(s.model || 'helper')} · ${s.rows.length} row</span></button>`).join('')}</div>` : '<p class="muted">Belum ada file. Upload XLSX dari ChatGPT/barcode/export Odoo.</p>'}
+      </section>
+      <section class="card">
+        <div class="section-title"><h2>2. Review cepat</h2><span>${sh ? esc(sh.name) : 'Belum ada sheet'}</span></div>
+        ${sh ? quickIssues(sh).map(x=>`<div class="pill ${x.level}">${esc(x.message)}</div>`).join('') : ''}
+        ${sh && !sh.helper ? `<div class="toolbar"><button data-action="schemaXlsx">Export Schema Real XLSX</button><button data-action="schemaTxt">Download AI Context</button><button data-action="preflightActive">Preflight Sheet Ini</button><button class="primary" data-action="preflightAll">Preflight Semua</button></div>` : ''}
+        ${sh ? tablePreview(sh) : ''}
+      </section>
+      <section class="card danger-zone">
+        <div class="section-title"><h2>3. Import</h2><span>${state.preflight?.ok ? 'Preflight OK' : 'Terkunci sampai preflight error = 0'}</span></div>
+        <p class="muted">Import hanya aktif secara logika setelah preflight semua lolos. Batch kecil supaya Vercel/Odoo Online tidak timeout.</p>
+        <label>Batch size <input type="number" min="5" max="100" value="${esc(state.batchSize)}" data-input="batchSize"></label>
+        <button class="danger" data-action="importAll">Import Semua Sheet yang Lolos</button>
+      </section>
+    `;
+  }
+
+  function tablePreview(sh) {
+    const cols = (sh.cols || []).slice(0, 12);
+    const rows = (sh.rows || []).slice(0, 30);
+    return `<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${cols.map(c=>`<td>${esc(String(r[c] ?? '').slice(0,90))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>${sh.rows.length > 30 ? `<p class="muted">Menampilkan 30/${sh.rows.length} row pertama.</p>` : ''}`;
+  }
+
+  function schemaView() {
+    return `
+      <section class="card">
+        <h2>Schema Real untuk ChatGPT</h2>
+        <p>Ini fitur kunci. Studio mengambil schema langsung dari database Odoo: field, required, relation, selection, access rights, dan aturan import. File inilah yang ditempel/diupload ke ChatGPT sebelum minta dibuatkan XLSX.</p>
+        <label>Tambahan model custom, pisahkan koma/baris
+          <textarea data-input="customModels" rows="4" placeholder="x_lokal_id, x_lokal_role_id">${esc(state.customModels)}</textarea>
+        </label>
+        <div class="toolbar"><button data-action="schemaXlsx">Download Schema XLSX</button><button data-action="schemaJson">Download Schema JSON</button><button class="primary" data-action="schemaTxt">Download AI Context TXT</button></div>
+        <div class="model-list">${modelsFromWorkbook().map(m=>`<span>${esc(m)}</span>`).join('') || '<span>Belum ada model dari workbook. Default model Lokalmart tetap akan ikut.</span>'}</div>
+      </section>
+    `;
+  }
+
+  function reportView(c) {
+    return `
+      <section class="card">
+        <h2>Preflight Report</h2>
+        ${state.preflight ? `<div class="score ${state.preflight.ok?'ok':'bad'}"><b>${state.preflight.ok?'AMAN UNTUK IMPORT':'IMPORT DITAHAN'}</b><span>${state.preflight.rows_checked} row · ${c.errors} error · ${c.warnings} warning</span></div>` : '<p class="muted">Belum ada preflight report.</p>'}
+        ${state.preflight ? `<div class="issue-list">${(state.preflight.issues || []).slice(0,200).map(i=>`<div class="issue ${esc(i.level)}"><b>${esc(i.level)} · ${esc(i.sheet)} row ${esc(i.row)} · ${esc(i.model)} ${i.field?'/ '+esc(i.field):''}</b><span>${esc(i.message)}</span><small>${esc(i.suggestion || '')}</small></div>`).join('')}</div>` : ''}
+      </section>
+    `;
+  }
+
+  function settingsView() {
+    const env = state.server || {};
+    return `
+      <section class="card">
+        <h2>Koneksi Odoo</h2>
+        <div class="pill ${env.env_configured?'ok':'warn'}">${env.env_configured ? 'Mode aman: Vercel ENV aktif' : 'Env belum lengkap: browser fallback'}</div>
+        <p class="muted">${esc(env.public_hint || '')}</p>
+        ${env.env_missing?.length ? `<p class="muted">Kurang: ${esc(env.env_missing.join(', '))}</p>` : ''}
+        <div class="grid2">
+          <label>Odoo URL<input data-conn="url" value="${esc(state.conn.url)}" placeholder="https://namadb.odoo.com"></label>
+          <label>Database<input data-conn="db" value="${esc(state.conn.db)}"></label>
+          <label>Email/Username<input data-conn="username" value="${esc(state.conn.username)}"></label>
+          <label>Password/API Key<input type="password" data-conn="password" value="${esc(state.conn.password)}"></label>
+        </div>
+        <div class="toolbar"><button data-action="test">Test Koneksi</button><button data-action="refreshServer">Refresh API</button><button data-action="clearConn">Clear Browser Conn</button></div>
+      </section>
+    `;
+  }
+
+  function bind() {
+    $$('[data-nav]').forEach(b => b.onclick = () => { state.nav = b.dataset.nav; render(); });
+    $('[data-file="xlsx"]')?.addEventListener('change', e => readWorkbook(e.target.files[0]));
+    $$('[data-sheet]').forEach(b => b.onclick = () => { state.active = Number(b.dataset.sheet); render(); });
+    $$('[data-input]').forEach(el => el.oninput = () => { const k = el.dataset.input; state[k] = el.type === 'number' ? Number(el.value) : el.value; save(); });
+    $$('[data-conn]').forEach(el => el.oninput = () => { state.conn[el.dataset.conn] = el.value; save(); });
+    $$('[data-action]').forEach(b => b.onclick = () => actions[b.dataset.action]?.());
+  }
+
+  const actions = {
+    clearLogs: () => { state.logs = []; render(); },
+    clearConn: () => { state.conn = { url: '', db: '', username: '', password: '' }; save(); render(); },
+    refreshServer: checkServer,
+    test: testConn,
+    schemaXlsx: () => exportSchemaSnapshot('xlsx'),
+    schemaJson: () => exportSchemaSnapshot('json'),
+    schemaTxt: () => exportSchemaSnapshot('txt'),
+    preflightActive: () => preflight(false),
+    preflightAll: () => preflight(true),
+    importAll
+  };
+
+  load();
+  render();
+  checkServer();
 })();

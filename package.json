@@ -1,0 +1,15 @@
+{
+  "name": "lokalmart-new-studio",
+  "version": "11.1.0",
+  "private": true,
+  "description": "Lokalmart New Studio: Odoo real schema snapshot, AI context export, preflight import gate, and safe batch import.",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": "20.x"
+  }
+}
