@@ -207,6 +207,27 @@ async function findExistingByNaturalKey(conn, uid, model, row, vals, xmlCache) {
             const rows = await executeKw(conn, uid, 'ir.model.fields', 'search_read', [[['model_id', '=', modelId], ['name', '=', String(fieldName)]]], { fields: ['id', 'name'], limit: 1 });
             if (rows?.length) return { model: 'ir.model.fields', id: Number(rows[0].id), natural_key: 'model_id+name' };
         }
+        if (model === 'ir.model.access') {
+            let modelId = Number(vals.model_id || 0);
+            let groupId = vals.group_id === false ? false : Number(vals.group_id || 0);
+            if (!modelId && row.model_id_external_id) {
+                const resolved = await resolveXmlId(conn, uid, String(row.model_id_external_id), xmlCache);
+                if (resolved?.id) modelId = Number(resolved.id);
+            }
+            if (!groupId && row.group_id_external_id) {
+                const resolved = await resolveXmlId(conn, uid, String(row.group_id_external_id), xmlCache);
+                if (resolved?.id) groupId = Number(resolved.id);
+            }
+            const domain = [];
+            if (modelId) domain.push(['model_id', '=', modelId]);
+            if (groupId) domain.push(['group_id', '=', groupId]);
+            else if (Object.prototype.hasOwnProperty.call(vals, 'group_id')) domain.push(['group_id', '=', false]);
+            if (row.name || vals.name) domain.push(['name', '=', String(row.name || vals.name)]);
+            if (domain.length >= 2) {
+                const rows = await executeKw(conn, uid, 'ir.model.access', 'search_read', [domain], { fields: ['id', 'name'], limit: 1 });
+                if (rows?.length) return { model: 'ir.model.access', id: Number(rows[0].id), natural_key: 'model_id+group_id+name' };
+            }
+        }
     }
     catch {
         return null;
@@ -231,8 +252,16 @@ function sanitizeWriteValsForModel(model, vals) {
         drop(['model', 'state', 'transient', 'modules'], 'metadata immutable field tidak ditulis saat update ir.model');
     }
     if (model === 'ir.model.fields') {
-        // Technical field identity is immutable. Keep creation values for create, but avoid writing them on update.
-        drop(['name', 'model_id', 'model', 'ttype', 'relation', 'relation_field', 'relation_table', 'column1', 'column2', 'state', 'modules', 'compute', 'depends', 'related'], 'metadata immutable field tidak ditulis saat update ir.model.fields');
+        // Field rows are safe to create, but not safe to mutate on Odoo Online once the field exists.
+        // Even x_* fields can be treated by Odoo as base/manual fields after creation; writing required/store/index/etc.
+        // commonly raises: "Properties of base fields cannot be altered in this manner".
+        const removed = Object.keys(out);
+        for (const key of removed) delete out[key];
+        if (removed.length) warnings.push(`field sudah ada; properties ir.model.fields tidak ditulis ulang: ${removed.join(', ')}`);
+    }
+    if (model === 'ir.model.access') {
+        // Never rewrite FK identity of an access rule. Updating group_id/model_id can trigger FK/ACL constraints.
+        drop(['name', 'model_id', 'group_id'], 'ACL identity field tidak ditulis saat update ir.model.access');
     }
     return { vals: out, warnings };
 }
@@ -724,7 +753,7 @@ async function handleNameSearch(conn, body) {
 async function GET() {
     return json({
         ok: true,
-        app: 'New Studio v10.9 Metadata Upsert Fix',
+        app: 'New Studio v10.10 Metadata + ACL Safe Upsert Fix',
         connection: connStatus(),
         env_names: ['ODOO_URL', 'ODOO_DB', 'ODOO_USERNAME', 'ODOO_PASSWORD or ODOO_API_KEY'],
         actions: ['test', 'schema', 'record_scan', 'export_records', 'export_bundle', 'export_project', 'import_batch', 'name_search'],

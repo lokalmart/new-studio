@@ -1,4 +1,4 @@
-# New Studio v10.9 — Metadata Upsert Fix
+# New Studio v10.10 — Metadata Upsert Fix
 
 Perbaikan khusus untuk import schema Odoo custom model/field.
 
