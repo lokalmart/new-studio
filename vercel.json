@@ -1,19 +1,11 @@
 {
   "version": 2,
-  "installCommand": "echo \"Studio3 zero dependency: no install needed\"",
-  "buildCommand": "node scripts/build.js",
-  "outputDirectory": "dist",
-  "rewrites": [
-    { "source": "/api/odoo", "destination": "/api/odoo.js" },
-    { "source": "/app.js", "destination": "/app.js" },
-    { "source": "/styles.css", "destination": "/styles.css" },
-    { "source": "/manifest.webmanifest", "destination": "/manifest.webmanifest" },
-    { "source": "/icon.svg", "destination": "/icon.svg" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ],
   "functions": {
-    "api/odoo.js": {
-      "maxDuration": 60
-    }
-  }
+    "api/odoo.js": { "maxDuration": 60 }
+  },
+  "routes": [
+    { "src": "/api/odoo", "dest": "/api/odoo.js" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }

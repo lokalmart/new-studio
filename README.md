@@ -1,30 +1,36 @@
-# New Studio v10.10 — Metadata Upsert Fix
+# Lokalmart New Studio v11 — Schema Snapshot + Preflight Gate
 
-Perbaikan khusus untuk import schema Odoo custom model/field.
+Tujuan versi ini: menghentikan pola import XLSX dalam gelap.
 
-## Perbaikan
+## Workflow wajib
 
-- Koneksi Odoo bisa dibaca dari Vercel ENV: `ODOO_URL`, `ODOO_DB`, `ODOO_USERNAME`, `ODOO_PASSWORD` atau `ODOO_API_KEY`.
-- Import `__action=upsert` dan `__action=create_or_update` didukung.
-- Upsert `ir.model` tidak lagi menulis field teknis `model` saat record sudah ada, karena Odoo melarang perubahan field Model.
-- Upsert `ir.model.fields` memakai natural key `model_id + name` jika external ID belum ditemukan.
-- Saat update `ir.model.fields`, field identitas teknis seperti `name`, `model_id`, `ttype`, `relation`, dan `state` tidak ditulis ulang.
-- Error import tetap ditampilkan per row agar mudah dibaca.
+1. Upload XLSX dari ChatGPT / barcode / export Odoo.
+2. Klik **Download Schema XLSX** atau **Download AI Context TXT**.
+3. Berikan file/konteks itu ke ChatGPT sebelum minta dibuatkan XLSX baru.
+4. Upload XLSX hasil ChatGPT.
+5. Klik **Preflight Semua**.
+6. Import hanya jika preflight error = 0.
 
-## Cara deploy
+## Fitur utama
 
-1. Hapus isi repo lama atau replace seluruh root.
-2. Upload isi ZIP ke root repo.
-3. Pastikan root berisi `package.json`, `vercel.json`, `index.html`, `server.js`, `api/odoo.js`, `public/`, `scripts/`.
-4. Deploy ulang di Vercel dengan Clear Build Cache.
+- Mengambil schema real Odoo lewat `fields_get`.
+- Export context AI berisi model, fields, required fields, relation fields, selection values, access rights, dan aturan import.
+- Preflight server-side tanpa write ke Odoo.
+- Cek model kosong, kolom tidak ada, field required, readonly, type angka/boolean/tanggal, selection invalid, external ID relasi, duplicate external ID, access rights, urutan metadata, dan aturan khusus `ir.model.fields`.
+- Import batch kecil setelah preflight OK.
+- Koneksi via Vercel ENV: `ODOO_URL`, `ODOO_DB`, `ODOO_USERNAME`, `ODOO_PASSWORD` atau `ODOO_API_KEY`.
 
-## ENV Vercel
+## Deploy Vercel
 
-```text
-ODOO_URL=https://namadb.odoo.com
-ODOO_DB=nama_database
-ODOO_USERNAME=email_admin
-ODOO_PASSWORD=password_atau_api_key
-```
+Pastikan root repo berisi:
 
-`ODOO_API_KEY` juga bisa dipakai sebagai pengganti `ODOO_PASSWORD`.
+- `index.html`
+- `package.json`
+- `vercel.json`
+- `server.js`
+- `api/odoo.js`
+- `public/app.js`
+- `public/styles.css`
+- `scripts/build.js`
+
+Lalu deploy ulang dengan Clear Build Cache.

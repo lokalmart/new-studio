@@ -1,0 +1,9 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "permission": {
+    "edit": {
+      ".kilo/plans/*.md": "allow",
+      "*": "ask"
+    }
+  }
+}
