@@ -1,52 +1,30 @@
-# New Studio v10.8 — Vercel ENV Connection + Import Diagnostics
+# New Studio v10.9 — Metadata Upsert Fix
 
-Versi ini memperbaiki dua hal penting:
+Perbaikan khusus untuk import schema Odoo custom model/field.
 
-1. Koneksi Odoo bisa disimpan di **Vercel Environment Variables**, bukan diketik di browser.
-2. Error import tidak lagi berhenti dengan pesan generik `API Odoo error`; Studio akan menampilkan row mana yang gagal dan alasan dari Odoo.
+## Perbaikan
 
-## Environment Variables Vercel
+- Koneksi Odoo bisa dibaca dari Vercel ENV: `ODOO_URL`, `ODOO_DB`, `ODOO_USERNAME`, `ODOO_PASSWORD` atau `ODOO_API_KEY`.
+- Import `__action=upsert` dan `__action=create_or_update` didukung.
+- Upsert `ir.model` tidak lagi menulis field teknis `model` saat record sudah ada, karena Odoo melarang perubahan field Model.
+- Upsert `ir.model.fields` memakai natural key `model_id + name` jika external ID belum ditemukan.
+- Saat update `ir.model.fields`, field identitas teknis seperti `name`, `model_id`, `ttype`, `relation`, dan `state` tidak ditulis ulang.
+- Error import tetap ditampilkan per row agar mudah dibaca.
 
-Tambahkan di Vercel → Project → Settings → Environment Variables:
+## Cara deploy
+
+1. Hapus isi repo lama atau replace seluruh root.
+2. Upload isi ZIP ke root repo.
+3. Pastikan root berisi `package.json`, `vercel.json`, `index.html`, `server.js`, `api/odoo.js`, `public/`, `scripts/`.
+4. Deploy ulang di Vercel dengan Clear Build Cache.
+
+## ENV Vercel
 
 ```text
 ODOO_URL=https://namadb.odoo.com
 ODOO_DB=nama_database
-ODOO_USERNAME=email_admin_odoo
+ODOO_USERNAME=email_admin
 ODOO_PASSWORD=password_atau_api_key
 ```
 
-Alternatif untuk password:
-
-```text
-ODOO_API_KEY=api_key_odoo
-```
-
-Jika ENV lengkap, backend akan **memakai ENV sebagai source of truth** dan UI akan menampilkan `Env Vercel aktif`.
-
-## Fallback browser
-
-Jika ENV belum lengkap, UI tetap bisa memakai koneksi dari browser/localStorage. Ini hanya fallback untuk tes cepat.
-
-## Import behavior
-
-- `__action` yang didukung: `upsert`, `create_or_update`, `create`, `update`, `write`, `delete`, `unlink`, `skip`, `ignore`.
-- Jika sebagian row gagal, import batch berikutnya tetap bisa lanjut.
-- Error row ditampilkan di log agar mudah diperbaiki.
-
-## Deploy
-
-Framework Preset: `Other`
-Output Directory: `dist`
-
-Pastikan root repo berisi:
-
-```text
-package.json
-vercel.json
-server.js
-index.html
-api/odoo.js
-public/
-scripts/
-```
+`ODOO_API_KEY` juga bisa dipakai sebagai pengganti `ODOO_PASSWORD`.

@@ -179,6 +179,64 @@ async function createExternalId(conn, uid, model, resId, xmlid) {
         return null;
     }
 }
+
+async function findExistingByNaturalKey(conn, uid, model, row, vals, xmlCache) {
+    // Odoo technical metadata has immutable identifiers. If the external ID is missing,
+    // locate existing records by their natural technical key so upsert does not try to recreate them.
+    try {
+        if (model === 'ir.model') {
+            const technical = row.model || vals.model;
+            if (!technical) return null;
+            const rows = await executeKw(conn, uid, 'ir.model', 'search_read', [[['model', '=', String(technical)]]], { fields: ['id', 'model'], limit: 1 });
+            if (rows?.length) return { model: 'ir.model', id: Number(rows[0].id), natural_key: 'model' };
+        }
+        if (model === 'ir.model.fields') {
+            const fieldName = row.name || vals.name;
+            if (!fieldName) return null;
+            let modelId = Number(vals.model_id || 0);
+            if (!modelId && row.model_id_external_id) {
+                const resolved = await resolveXmlId(conn, uid, String(row.model_id_external_id), xmlCache);
+                if (resolved?.id) modelId = Number(resolved.id);
+            }
+            if (!modelId && row.model_id && String(row.model_id).match(/^\d+$/)) modelId = Number(row.model_id);
+            if (!modelId && row.model) {
+                const models = await executeKw(conn, uid, 'ir.model', 'search_read', [[['model', '=', String(row.model)]]], { fields: ['id'], limit: 1 });
+                if (models?.length) modelId = Number(models[0].id);
+            }
+            if (!modelId) return null;
+            const rows = await executeKw(conn, uid, 'ir.model.fields', 'search_read', [[['model_id', '=', modelId], ['name', '=', String(fieldName)]]], { fields: ['id', 'name'], limit: 1 });
+            if (rows?.length) return { model: 'ir.model.fields', id: Number(rows[0].id), natural_key: 'model_id+name' };
+        }
+    }
+    catch {
+        return null;
+    }
+    return null;
+}
+function sanitizeWriteValsForModel(model, vals) {
+    const out = { ...vals };
+    const warnings = [];
+    const drop = (keys, reason) => {
+        const removed = [];
+        for (const key of keys) {
+            if (Object.prototype.hasOwnProperty.call(out, key)) {
+                delete out[key];
+                removed.push(key);
+            }
+        }
+        if (removed.length) warnings.push(`${reason}: ${removed.join(', ')}`);
+    };
+    if (model === 'ir.model') {
+        // Odoo forbids writing technical model name after creation, even if the value is unchanged.
+        drop(['model', 'state', 'transient', 'modules'], 'metadata immutable field tidak ditulis saat update ir.model');
+    }
+    if (model === 'ir.model.fields') {
+        // Technical field identity is immutable. Keep creation values for create, but avoid writing them on update.
+        drop(['name', 'model_id', 'model', 'ttype', 'relation', 'relation_field', 'relation_table', 'column1', 'column2', 'state', 'modules', 'compute', 'depends', 'related'], 'metadata immutable field tidak ditulis saat update ir.model.fields');
+    }
+    return { vals: out, warnings };
+}
+
 function isBlank(value) {
     return value === null || value === undefined || String(value).trim() === '';
 }
@@ -616,6 +674,10 @@ async function handleImportBatch(conn, body) {
                 existing = await resolveXmlId(conn, uid, String(external), xmlCache);
             if (!existing && odooId)
                 existing = { model, id: odooId };
+            if (!existing)
+                existing = await findExistingByNaturalKey(conn, uid, model, row, vals, xmlCache);
+            if (existing?.id && external)
+                await createExternalId(conn, uid, model, Number(existing.id), String(external));
             if (action === 'delete' || action === 'unlink') {
                 if (!existing?.id)
                     throw new Error('Tidak bisa delete: record tidak ditemukan dari _external_id / x_studio2_odoo_id.');
@@ -624,10 +686,12 @@ async function handleImportBatch(conn, body) {
                 continue;
             }
             if (existing?.id && (isUpsertAction || action === 'update' || action === 'write')) {
-                if (Object.keys(vals).length)
-                    await executeKw(conn, uid, model, 'write', [[existing.id], vals]);
+                const safeWrite = sanitizeWriteValsForModel(model, vals);
+                const updateWarnings = warnings.concat(safeWrite.warnings || []);
+                if (Object.keys(safeWrite.vals).length)
+                    await executeKw(conn, uid, model, 'write', [[existing.id], safeWrite.vals]);
                 updated++;
-                results.push({ row: rowIndex, status: 'updated', id: existing.id, model, skippedCols, warnings });
+                results.push({ row: rowIndex, status: 'updated', id: existing.id, model, skippedCols, warnings: updateWarnings, natural_key: existing.natural_key || '' });
             }
             else if (isUpsertAction || action === 'create') {
                 const newId = await executeKw(conn, uid, model, 'create', [vals]);
@@ -660,7 +724,7 @@ async function handleNameSearch(conn, body) {
 async function GET() {
     return json({
         ok: true,
-        app: 'New Studio v10.8 Vercel Env Odoo Data Command Studio',
+        app: 'New Studio v10.9 Metadata Upsert Fix',
         connection: connStatus(),
         env_names: ['ODOO_URL', 'ODOO_DB', 'ODOO_USERNAME', 'ODOO_PASSWORD or ODOO_API_KEY'],
         actions: ['test', 'schema', 'record_scan', 'export_records', 'export_bundle', 'export_project', 'import_batch', 'name_search'],

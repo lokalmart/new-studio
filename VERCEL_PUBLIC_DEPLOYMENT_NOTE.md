@@ -1,12 +1,13 @@
-# Vercel Deployment Note
+# Vercel Public Deployment
 
-Agar Studio tidak meminta credential Odoo di browser, isi Environment Variables:
+Gunakan Framework Preset: Other.
 
-- `ODOO_URL`
-- `ODOO_DB`
-- `ODOO_USERNAME`
-- `ODOO_PASSWORD` atau `ODOO_API_KEY`
+Vercel ENV wajib diisi kalau ingin koneksi tidak dimasukkan dari browser. Setelah mengubah ENV, redeploy ulang.
 
-Setelah menambah ENV, lakukan **Redeploy**. Environment Variable Vercel baru tidak selalu masuk ke deployment lama sebelum redeploy.
+Endpoint cek:
 
-Jika Vercel masih memakai file lama, gunakan **Redeploy → Clear Build Cache**.
+```text
+/api/odoo
+```
+
+Harus menampilkan `env_configured: true`.

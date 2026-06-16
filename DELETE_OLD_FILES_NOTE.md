@@ -1,13 +1,12 @@
-# Hapus file lama sebelum deploy
+# Hapus File Lama
 
-Sebaiknya replace total isi repo agar tidak ada file lama yang bentrok.
-
-Hapus jika ada:
+Sebelum memakai versi ini, pastikan tidak ada file lama dari Next/Vite/Studio3 yang tersisa:
 
 - `next.config.mjs`
-- `src/app/`
+- `src/app`
+- `src/` lama bila bukan dari paket ini
 - `package-lock.json`
 - `pnpm-lock.yaml`
-- `dist/` hasil build lama
+- file build lama yang tidak dipakai
 
-Root repo baru harus berisi file dari paket v10.8 ini.
+Versi ini adalah static zero-install + Vercel Function.
