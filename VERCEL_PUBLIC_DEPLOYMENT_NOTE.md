@@ -1,5 +1,12 @@
-# Vercel Public Deployment
+# Vercel Deployment Note
 
-Kalau halaman meminta login Vercel, matikan Deployment Protection untuk production deployment atau gunakan production domain.
+Agar Studio tidak meminta credential Odoo di browser, isi Environment Variables:
 
-Untuk masalah entrypoint, pastikan Framework Preset bukan Node server custom, melainkan Other/Static, dan file `vercel.json` terbaru terbaca.
+- `ODOO_URL`
+- `ODOO_DB`
+- `ODOO_USERNAME`
+- `ODOO_PASSWORD` atau `ODOO_API_KEY`
+
+Setelah menambah ENV, lakukan **Redeploy**. Environment Variable Vercel baru tidak selalu masuk ke deployment lama sebelum redeploy.
+
+Jika Vercel masih memakai file lama, gunakan **Redeploy → Clear Build Cache**.

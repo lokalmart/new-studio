@@ -1,8 +1,8 @@
 {
-  "name": "lokalmart-new-studio-v10-7",
-  "version": "10.7.0",
+  "name": "lokalmart-new-studio-v10-8-env-connection",
+  "version": "10.8.0",
   "private": true,
-  "description": "Lokalmart New Studio static Vercel app with Odoo JSON-RPC API, multi-model export, smart bundle export, and XLSX import validation.",
+  "description": "Lokalmart New Studio static Vercel app with Odoo connection from Vercel ENV and improved import diagnostics.",
   "main": "server.js",
   "scripts": {
     "build": "node scripts/build.js",

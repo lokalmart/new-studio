@@ -10,6 +10,40 @@ function cleanUrl(url) {
 function json(data, status = 200) {
     return { status, data };
 }
+function envConn() {
+    const password = process.env.ODOO_PASSWORD || process.env.ODOO_API_KEY || '';
+    return {
+        url: process.env.ODOO_URL || process.env.ODOO_BASE_URL || '',
+        db: process.env.ODOO_DB || process.env.ODOO_DATABASE || '',
+        username: process.env.ODOO_USERNAME || process.env.ODOO_EMAIL || '',
+        password
+    };
+}
+function hasCompleteConn(conn) {
+    return Boolean(conn?.url && conn?.db && conn?.username && conn?.password);
+}
+function getConn(clientConn = {}) {
+    const env = envConn();
+    // Default: if Vercel env is complete, it is the source of truth.
+    if (hasCompleteConn(env)) {
+        return { ...env, source: 'vercel_env' };
+    }
+    return { ...(clientConn || {}), source: 'browser' };
+}
+function connStatus() {
+    const env = envConn();
+    const missing = [];
+    if (!env.url) missing.push('ODOO_URL');
+    if (!env.db) missing.push('ODOO_DB');
+    if (!env.username) missing.push('ODOO_USERNAME');
+    if (!env.password) missing.push('ODOO_PASSWORD / ODOO_API_KEY');
+    return {
+        env_configured: missing.length === 0,
+        env_missing: missing,
+        source: missing.length === 0 ? 'vercel_env' : 'browser_fallback',
+        public_hint: missing.length === 0 ? 'Koneksi Odoo dibaca dari Vercel Environment Variables.' : 'Env Vercel belum lengkap; Studio memakai koneksi dari browser.'
+    };
+}
 function assertConn(conn) {
     if (!conn?.url || !conn?.db || !conn?.username || !conn?.password) {
         throw new Error('Koneksi Odoo belum lengkap: url, db, username, password/api key wajib diisi.');
@@ -566,7 +600,9 @@ async function handleImportBatch(conn, body) {
             if (!schemas.has(model))
                 schemas.set(model, await fieldsGet(conn, uid, model));
             const schema = schemas.get(model);
-            const action = String(row.__action || 'upsert').trim().toLowerCase();
+            const rawAction = String(row.__action || 'upsert').trim().toLowerCase();
+            const action = rawAction.replace(/[\s-]+/g, '_');
+            const isUpsertAction = ['upsert', 'create_or_update', 'create_update', 'create_and_update', 'insert_or_update'].includes(action);
             if (action === 'skip' || action === 'ignore') {
                 skipped++;
                 results.push({ row: rowIndex, status: 'skipped', model });
@@ -587,13 +623,13 @@ async function handleImportBatch(conn, body) {
                 results.push({ row: rowIndex, status: 'deleted', id: existing.id, model, skippedCols, warnings });
                 continue;
             }
-            if (existing?.id && (action === 'upsert' || action === 'update' || action === 'write')) {
+            if (existing?.id && (isUpsertAction || action === 'update' || action === 'write')) {
                 if (Object.keys(vals).length)
                     await executeKw(conn, uid, model, 'write', [[existing.id], vals]);
                 updated++;
                 results.push({ row: rowIndex, status: 'updated', id: existing.id, model, skippedCols, warnings });
             }
-            else if (action === 'upsert' || action === 'create') {
+            else if (isUpsertAction || action === 'create') {
                 const newId = await executeKw(conn, uid, model, 'create', [vals]);
                 if (external)
                     await createExternalId(conn, uid, model, Number(newId), String(external));
@@ -607,7 +643,7 @@ async function handleImportBatch(conn, body) {
         }
         catch (err) {
             failed++;
-            results.push({ row: rowIndex, status: 'error', model, error: err?.message || String(err) });
+            results.push({ row: rowIndex, status: 'error', model, error: err?.message || String(err), action: row.__action || 'upsert', external_id: row._external_id || row.external_id || '' });
         }
     }
     return { ok: failed === 0, processed: rows.length, created, updated, skipped, failed, results };
@@ -624,15 +660,17 @@ async function handleNameSearch(conn, body) {
 async function GET() {
     return json({
         ok: true,
-        app: 'Studio2 v10 Vercel-only Odoo Data Command Studio',
+        app: 'New Studio v10.8 Vercel Env Odoo Data Command Studio',
+        connection: connStatus(),
+        env_names: ['ODOO_URL', 'ODOO_DB', 'ODOO_USERNAME', 'ODOO_PASSWORD or ODOO_API_KEY'],
         actions: ['test', 'schema', 'record_scan', 'export_records', 'export_bundle', 'export_project', 'import_batch', 'name_search'],
-        note: 'Designed for short serverless calls. Browser handles XLSX preview/editor/batching.'
+        note: 'Koneksi dapat dibaca dari Vercel Environment Variables; browser connection hanya fallback.'
     });
 }
 async function POST(req) {
     try {
         const body = await req.json();
-        const conn = body.connection;
+        const conn = getConn(body.connection);
         const action = body.action;
         if (!action)
             throw new Error('Action kosong.');
